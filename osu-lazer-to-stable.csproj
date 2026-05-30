@@ -12,5 +12,7 @@
     <PackageReference Include="Realm" Version="20.1.0" />
     <PackageReference Include="SharpCompress" Version="0.48.0" />
   </ItemGroup>
-
+<PropertyGroup>
+  <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+</PropertyGroup>
 </Project>
