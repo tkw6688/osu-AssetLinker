@@ -8,7 +8,7 @@ using Realms;
 
 // ============================================================
 //  osu! Lazer → Stable 铺面同步工具
-//  用法: osu-lazer-to-stable [lazer目录] [Songs目录] [--relink]
+//  用法: osu-AssetLinker [lazer目录] [Songs目录] [--relink]
 //  --relink  对 stable 中已有的普通文件也替换为硬链接（释放磁盘）
 // ============================================================
 
@@ -19,7 +19,7 @@ PrintBanner();
 if (args.Contains("--help") || args.Contains("-h"))
 {
     Console.WriteLine("用法:");
-    Console.WriteLine("  osu-lazer-to-stable [lazer目录] [Songs目录] [选项]");
+    Console.WriteLine("  osu-AssetLinker [lazer目录] [Songs目录] [选项]");
     Console.WriteLine();
     Console.WriteLine("参数:");
     Console.WriteLine("  lazer目录    osu! lazer 数据目录（含 client.realm）");
@@ -33,16 +33,16 @@ if (args.Contains("--help") || args.Contains("-h"))
     Console.WriteLine("  --help, -h   显示此帮助信息");
     Console.WriteLine();
     Console.WriteLine("示例:");
-    Console.WriteLine("  osu-lazer-to-stable");
+    Console.WriteLine("  osu-AssetLinker");
     Console.WriteLine("      自动检测路径，同步 lazer 铺面到 stable（跳过已有铺面）");
     Console.WriteLine();
-    Console.WriteLine("  osu-lazer-to-stable --relink");
+    Console.WriteLine("  osu-AssetLinker --relink");
     Console.WriteLine("      自动检测路径，并将 stable 中已有的普通文件替换为硬链接");
     Console.WriteLine();
-    Console.WriteLine("  osu-lazer-to-stable \"C:\\Users\\你\\AppData\\Roaming\\osu\" \"C:\\osu!\\Songs\"");
+    Console.WriteLine("  osu-AssetLinker \"C:\\Users\\你\\AppData\\Roaming\\osu\" \"C:\\osu!\\Songs\"");
     Console.WriteLine("      手动指定路径同步");
     Console.WriteLine();
-    Console.WriteLine("  osu-lazer-to-stable \"D:\\osu-lazer\" \"D:\\osu-stable\\Songs\" --relink");
+    Console.WriteLine("  osu-AssetLinker \"D:\\osu-lazer\" \"D:\\osu-stable\\Songs\" --relink");
     Console.WriteLine("      手动指定路径并启用重链接");
     Console.WriteLine();
     Console.WriteLine("说明:");
@@ -53,6 +53,9 @@ if (args.Contains("--help") || args.Contains("-h"))
     return 0;
 }
 
+// --- 0. 检测运行模式 ---
+bool interactiveMode = IsInteractiveMode() && args.Length == 0;
+
 // --- 1. 解析参数 ---
 bool relink = args.Contains("--relink");
 string[] pathArgs = args.Where(a => !a.StartsWith("--")).ToArray();
@@ -60,7 +63,13 @@ string[] pathArgs = args.Where(a => !a.StartsWith("--")).ToArray();
 string? lazerDataPath;
 string? stableSongsPath;
 
-if (pathArgs.Length >= 2)
+if (interactiveMode)
+{
+    string? detectedLazer = DetectLazerDataPath();
+    string? detectedStable = DetectStableSongsPath();
+    InteractivePrompt(detectedLazer, detectedStable, out lazerDataPath, out stableSongsPath, out relink);
+}
+else if (pathArgs.Length >= 2)
 {
     lazerDataPath = pathArgs[0];
     stableSongsPath = pathArgs[1];
@@ -74,7 +83,7 @@ else
     {
         Console.ForegroundColor = ConsoleColor.Red;
         Console.WriteLine("无法自动检测路径，请手动指定：");
-        Console.WriteLine("  用法: osu-lazer-to-stable <lazer目录> <stable Songs目录> [--relink]");
+        Console.WriteLine("  用法: osu-AssetLinker <lazer目录> <stable Songs目录> [--relink]");
         Console.ResetColor();
         return 1;
     }
@@ -95,7 +104,7 @@ if (relink)
 Console.WriteLine();
 
 // --- 2. 验证路径 ---
-string? realmFile = FindRealmFile(lazerDataPath);
+string? realmFile = FindRealmFile(lazerDataPath!);
 if (realmFile == null)
 {
     Console.ForegroundColor = ConsoleColor.Red;
@@ -104,7 +113,7 @@ if (realmFile == null)
     return 1;
 }
 
-string lazerFilesPath = Path.Combine(lazerDataPath, "files");
+string lazerFilesPath = Path.Combine(lazerDataPath!, "files");
 if (!Directory.Exists(lazerFilesPath))
 {
     Console.ForegroundColor = ConsoleColor.Red;
@@ -116,11 +125,11 @@ if (!Directory.Exists(lazerFilesPath))
 if (!Directory.Exists(stableSongsPath))
 {
     Console.WriteLine($"创建 Songs 目录: {stableSongsPath}");
-    Directory.CreateDirectory(stableSongsPath);
+    Directory.CreateDirectory(stableSongsPath!);
 }
 
 // --- 3. 检测硬链接可用性 ---
-bool hardLinksAvailable = CheckHardLinkAvailability(lazerFilesPath, stableSongsPath);
+bool hardLinksAvailable = CheckHardLinkAvailability(lazerFilesPath, stableSongsPath!);
 Console.ForegroundColor = hardLinksAvailable ? ConsoleColor.Green : ConsoleColor.Yellow;
 Console.WriteLine(hardLinksAvailable
     ? "✓ 硬链接可用（同一分区），文件将零额外磁盘占用"
@@ -187,7 +196,7 @@ try
             .DefaultIfEmpty(0)
             .Max();
         // 总路径 = stableSongsPath + '\' + folderName + '\' + fileName <= 259
-        int maxFolderLen = Math.Clamp(259 - stableSongsPath.Length - 1 - longestFileLen - 1, 20, 200);
+        int maxFolderLen = Math.Clamp(259 - stableSongsPath!.Length - 1 - longestFileLen - 1, 20, 200);
         string folderName = BuildStableFolderName(set, maxFolderLen);
         string destDir = Path.Combine(stableSongsPath, folderName);
         int idx = synced + skipped + relinked + failed + 1;
@@ -280,6 +289,12 @@ if (synced > 0 || relinked > 0)
     Console.ForegroundColor = ConsoleColor.Yellow;
     Console.WriteLine("\n提示: 启动 osu!stable 后，按 F5 刷新铺面列表");
     Console.ResetColor();
+}
+
+if (interactiveMode)
+{
+    Console.Write("\n按任意键退出...");
+    Console.ReadKey(true);
 }
 
 return failed > 0 ? 2 : 0;
@@ -557,6 +572,68 @@ static bool TryCreateHardLink(string dest, string src)
 static string TruncateString(string s, int maxLen)
     => s.Length <= maxLen ? s : s[..maxLen] + "…";
 
+static bool IsInteractiveMode()
+{
+    if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        return false;
+    uint[] list = new uint[1];
+    return GetConsoleProcessList(list, 1) <= 1;
+}
+
+static void InteractivePrompt(string? detectedLazer, string? detectedStable, out string? lazerPath, out string? stablePath, out bool relinkMode)
+{
+    Console.WriteLine("交互模式（双击运行）\n");
+
+    lazerPath = null;
+    stablePath = null;
+    relinkMode = false;
+
+    if (detectedLazer != null)
+        Console.WriteLine($"[自动检测] Lazer 数据目录: {detectedLazer}");
+
+    do
+    {
+        Console.Write("请输入 Lazer 数据目录路径（留空自动检测）: ");
+        string? input = Console.ReadLine()?.Trim();
+        lazerPath = string.IsNullOrEmpty(input) ? detectedLazer : input;
+
+        if (lazerPath == null)
+        {
+            Console.WriteLine("自动检测失败，请手动输入路径");
+            continue;
+        }
+
+        if (FindRealmFile(lazerPath) == null)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"错误: 在 '{lazerPath}' 中找不到 client.realm 文件");
+            Console.ResetColor();
+            lazerPath = null;
+        }
+    } while (lazerPath == null);
+
+    if (detectedStable != null)
+        Console.WriteLine($"[自动检测] Stable Songs 目录: {detectedStable}");
+
+    do
+    {
+        Console.Write("请输入 Stable Songs 目录路径（留空自动检测）: ");
+        string? input = Console.ReadLine()?.Trim();
+        stablePath = string.IsNullOrEmpty(input) ? detectedStable : input;
+
+        if (stablePath == null)
+        {
+            Console.WriteLine("自动检测失败，请手动输入路径");
+        }
+    } while (stablePath == null);
+
+    Console.Write("\n是否启用 --relink 模式？（释放磁盘空间）[y/N]: ");
+    string? relinkInput = Console.ReadLine()?.Trim().ToLower();
+    relinkMode = relinkInput == "y" || relinkInput == "yes";
+
+    Console.WriteLine();
+}
+
 // ── Windows 原生 API ─────────────────────────────────────────
 [DllImport("Kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
 static extern bool CreateHardLink(string lpFileName, string lpExistingFileName, IntPtr lpSecurityAttributes);
@@ -570,6 +647,9 @@ static extern bool GetFileInformationByHandle(IntPtr handle, out ByHandleFileInf
 
 [DllImport("kernel32.dll", SetLastError = true)]
 static extern bool CloseHandle(IntPtr hObject);
+
+[DllImport("kernel32.dll")]
+static extern uint GetConsoleProcessList(uint[] processList, uint processCount);
 
 [DllImport("libc", SetLastError = true)]
 static extern int link(string oldpath, string newpath);
