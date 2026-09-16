@@ -12,6 +12,13 @@
     <PackageReference Include="Realm" Version="20.1.0" />
     <PackageReference Include="SharpCompress" Version="0.48.0" />
   </ItemGroup>
+
+  <!-- osu/ 是 osu!lazer 源码，仅供查阅参考，不能参与编译 -->
+  <ItemGroup>
+    <Compile Remove="osu/**" />
+    <None Remove="osu/**" />
+    <EmbeddedResource Remove="osu/**" />
+  </ItemGroup>
 <PropertyGroup>
   <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
 </PropertyGroup>

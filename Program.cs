@@ -1,64 +1,36 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using OsuAssetLinker;
 using Realms;
 
 // ============================================================
-//  osu! Lazer → Stable 铺面同步工具
-//  用法: osu-AssetLinker [lazer目录] [Songs目录] [--relink]
-//  --relink  对 stable 中已有的普通文件也替换为硬链接（释放磁盘）
+//  osu! Lazer → Stable 数据同步工具
+//  用法: osu-AssetLinker [lazer目录] [Songs目录] [功能开关]
 // ============================================================
 
 Console.OutputEncoding = Encoding.UTF8;
-PrintBanner();
+Ui.Banner();
 
 // --- --help ---
 if (args.Contains("--help") || args.Contains("-h"))
 {
-    Console.WriteLine("用法:");
-    Console.WriteLine("  osu-AssetLinker [lazer目录] [Songs目录] [选项]");
-    Console.WriteLine();
-    Console.WriteLine("参数:");
-    Console.WriteLine("  lazer目录    osu! lazer 数据目录（含 client.realm）");
-    Console.WriteLine("               留空则自动检测 %APPDATA%\\osu");
-    Console.WriteLine("  Songs目录    osu!stable 的 Songs 文件夹路径");
-    Console.WriteLine("               留空则自动检测（读取 stable 配置文件）");
-    Console.WriteLine();
-    Console.WriteLine("选项:");
-    Console.WriteLine("  --relink     将 stable 中已有的普通文件替换为硬链接，释放磁盘空间");
-    Console.WriteLine("               （要求两个目录在同一磁盘分区，硬链接才能生效）");
-    Console.WriteLine("  --help, -h   显示此帮助信息");
-    Console.WriteLine();
-    Console.WriteLine("示例:");
-    Console.WriteLine("  osu-AssetLinker");
-    Console.WriteLine("      自动检测路径，同步 lazer 铺面到 stable（跳过已有铺面）");
-    Console.WriteLine();
-    Console.WriteLine("  osu-AssetLinker --relink");
-    Console.WriteLine("      自动检测路径，并将 stable 中已有的普通文件替换为硬链接");
-    Console.WriteLine();
-    Console.WriteLine("  osu-AssetLinker \"C:\\Users\\你\\AppData\\Roaming\\osu\" \"C:\\osu!\\Songs\"");
-    Console.WriteLine("      手动指定路径同步");
-    Console.WriteLine();
-    Console.WriteLine("  osu-AssetLinker \"D:\\osu-lazer\" \"D:\\osu-stable\\Songs\" --relink");
-    Console.WriteLine("      手动指定路径并启用重链接");
-    Console.WriteLine();
-    Console.WriteLine("说明:");
-    Console.WriteLine("  · 同一分区时使用硬链接，文件不会被复制，磁盘占用为零");
-    Console.WriteLine("  · 不同分区时回退为复制，占用额外磁盘空间");
-    Console.WriteLine("  · 运行前请关闭 osu! lazer（Realm 数据库需要独占访问）");
-    Console.WriteLine("  · 同步完成后在 stable 中按 F5 刷新铺面列表");
+    PrintHelp();
     return 0;
 }
 
-// --- 0. 检测运行模式 ---
-bool interactiveMode = IsInteractiveMode() && args.Length == 0;
-
 // --- 1. 解析参数 ---
 bool relink = args.Contains("--relink");
-string[] pathArgs = args.Where(a => !a.StartsWith("--")).ToArray();
+string[] pathArgs = args.Where(a => !a.StartsWith('-')).ToArray();
+
+var features = new List<Feature>();
+if (args.Contains("--all")) features.AddRange(AllFeatures());
+if (args.Contains("--beats")) features.Add(Feature.Beatmaps);
+if (args.Contains("--skins")) features.Add(Feature.Skins);
+// 没有任何功能开关时保持旧行为：只同步铺面
+if (features.Count == 0) features.Add(Feature.Beatmaps);
+features = features.Distinct().ToList();
+
+bool interactiveMode = IsInteractiveMode() && args.Length == 0;
 
 string? lazerDataPath;
 string? stableSongsPath;
@@ -67,7 +39,14 @@ if (interactiveMode)
 {
     string? detectedLazer = DetectLazerDataPath();
     string? detectedStable = DetectStableSongsPath();
-    InteractivePrompt(detectedLazer, detectedStable, out lazerDataPath, out stableSongsPath, out relink);
+
+    if (!InteractivePrompt(detectedLazer, detectedStable, out lazerDataPath, out stableSongsPath, out relink, features))
+    {
+        Console.WriteLine();
+        Ui.Warn("已取消。");
+        PauseBeforeExit();
+        return 0;
+    }
 }
 else if (pathArgs.Length >= 2)
 {
@@ -81,25 +60,20 @@ else
 
     if (lazerDataPath is null || stableSongsPath is null)
     {
-        Console.ForegroundColor = ConsoleColor.Red;
-        Console.WriteLine("无法自动检测路径，请手动指定：");
-        Console.WriteLine("  用法: osu-AssetLinker <lazer目录> <stable Songs目录> [--relink]");
-        Console.ResetColor();
+        Ui.Error("无法自动检测路径，请手动指定：");
+        Console.WriteLine("  用法: osu-AssetLinker <lazer目录> <stable Songs目录> [功能开关]");
         return 1;
     }
 
-    Console.ForegroundColor = ConsoleColor.Cyan;
-    Console.WriteLine($"[自动检测] Lazer 数据目录: {lazerDataPath}");
-    Console.WriteLine($"[自动检测] Stable Songs 目录: {stableSongsPath}");
-    Console.ResetColor();
+    Ui.Info($"[自动检测] Lazer 数据目录: {lazerDataPath}");
+    Ui.Info($"[自动检测] Stable Songs 目录: {stableSongsPath}");
 }
 
+stableSongsPath = ResolveSongsPath(stableSongsPath!);
+string stableRoot = Path.GetDirectoryName(stableSongsPath) ?? stableSongsPath;
+
 if (relink)
-{
-    Console.ForegroundColor = ConsoleColor.Magenta;
-    Console.WriteLine("[模式] --relink：将对已有文件也替换为硬链接以释放磁盘空间");
-    Console.ResetColor();
-}
+    Ui.Accent("[模式] --relink：将对已有文件也替换为硬链接以释放磁盘空间");
 
 Console.WriteLine();
 
@@ -107,212 +81,193 @@ Console.WriteLine();
 string? realmFile = FindRealmFile(lazerDataPath!);
 if (realmFile == null)
 {
-    Console.ForegroundColor = ConsoleColor.Red;
-    Console.WriteLine($"错误: 在 '{lazerDataPath}' 中找不到 client.realm 文件");
-    Console.ResetColor();
+    Ui.Error($"错误: 在 '{lazerDataPath}' 中找不到 client.realm 文件");
     return 1;
 }
 
 string lazerFilesPath = Path.Combine(lazerDataPath!, "files");
 if (!Directory.Exists(lazerFilesPath))
 {
-    Console.ForegroundColor = ConsoleColor.Red;
-    Console.WriteLine($"错误: Lazer files 目录不存在: {lazerFilesPath}");
-    Console.ResetColor();
+    Ui.Error($"错误: Lazer files 目录不存在: {lazerFilesPath}");
     return 1;
 }
 
-if (!Directory.Exists(stableSongsPath))
+if (features.Contains(Feature.Beatmaps) && !Directory.Exists(stableSongsPath))
 {
     Console.WriteLine($"创建 Songs 目录: {stableSongsPath}");
-    Directory.CreateDirectory(stableSongsPath!);
+    Directory.CreateDirectory(stableSongsPath);
 }
 
 // --- 3. 检测硬链接可用性 ---
-bool hardLinksAvailable = CheckHardLinkAvailability(lazerFilesPath, stableSongsPath!);
-Console.ForegroundColor = hardLinksAvailable ? ConsoleColor.Green : ConsoleColor.Yellow;
-Console.WriteLine(hardLinksAvailable
-    ? "✓ 硬链接可用（同一分区），文件将零额外磁盘占用"
-    : "⚠ 硬链接不可用（不同分区），文件将被复制");
-Console.ResetColor();
-
-if (relink && !hardLinksAvailable)
+if (features.Contains(Feature.Beatmaps) || features.Contains(Feature.Skins))
 {
-    Console.ForegroundColor = ConsoleColor.Red;
-    Console.WriteLine("错误: --relink 需要硬链接支持（两个目录必须在同一磁盘分区）");
-    Console.ResetColor();
-    return 1;
+    bool? sameVolume = HardLink.SameVolume(
+        HardLink.NearestExistingDirectory(lazerFilesPath),
+        HardLink.NearestExistingDirectory(stableRoot));
+
+    if (sameVolume == false)
+    {
+        Ui.Warn("⚠ 硬链接不可用（lazer 与 stable 在不同分区），文件将被复制");
+        if (relink)
+        {
+            Ui.Error("错误: --relink 需要硬链接支持（两个目录必须在同一磁盘分区）");
+            return 1;
+        }
+    }
+    else
+    {
+        Ui.Ok("✓ 硬链接可用（同一分区），文件将零额外磁盘占用");
+    }
 }
 
 Console.WriteLine();
 
-// --- 4. 打开 Realm 数据库（只读） ---
+// --- 4. 打开 Realm 数据库（只读）---
 Console.WriteLine($"正在读取 Lazer 数据库: {realmFile}");
 
-RealmConfiguration config;
+Realm realm;
 try
 {
-    string tempDir = Path.Combine(Path.GetTempPath(), "lazer-sync");
-    Directory.CreateDirectory(tempDir);
-
-    config = new RealmConfiguration(realmFile)
-    {
-        SchemaVersion = 51,
-        IsReadOnly = true,
-        FallbackPipePath = tempDir,
-        Schema = new Type[]
-        {
-            typeof(BeatmapSetInfo),
-            typeof(BeatmapInfo),
-            typeof(BeatmapMetadata),
-            typeof(RealmNamedFileUsage),
-            typeof(RealmFile),
-        }
-    };
+    realm = LazerRealm.Open(realmFile);
 }
 catch (Exception ex)
 {
-    Console.ForegroundColor = ConsoleColor.Red;
-    Console.WriteLine($"Realm 配置失败: {ex.Message}");
-    Console.ResetColor();
+    Ui.Error($"\n{ex.Message}");
+    if (ex is not InvalidOperationException)
+        Ui.Error("\n提示: 请先关闭 osu! lazer 再运行本工具");
     return 1;
 }
 
-int total = 0, synced = 0, skipped = 0, relinked = 0, failed = 0;
+// --- 5. 执行同步 ---
+var results = new List<SyncStats>();
 
 try
 {
-    using var realm = Realm.GetInstance(config);
-    var beatmapSets = realm.All<BeatmapSetInfo>().Where(s => !s.DeletePending).ToList();
-    total = beatmapSets.Count;
-    Console.WriteLine($"共找到 {total} 个铺面集\n");
-
-    foreach (var set in beatmapSets)
+    using (realm)
     {
-        // 动态计算文件夹名最大长度，确保总路径不超 Windows MAX_PATH (260)
-        int longestFileLen = set.Files
-            .Where(f => f.File != null)
-            .Select(f => SanitizeFilePath(f.Filename).Length)
-            .DefaultIfEmpty(0)
-            .Max();
-        // 总路径 = stableSongsPath + '\' + folderName + '\' + fileName <= 259
-        int maxFolderLen = Math.Clamp(259 - stableSongsPath!.Length - 1 - longestFileLen - 1, 20, 200);
-        string folderName = BuildStableFolderName(set, maxFolderLen);
-        string destDir = Path.Combine(stableSongsPath, folderName);
-        int idx = synced + skipped + relinked + failed + 1;
-
-        bool alreadyExists = CheckAlreadySynced(destDir, set);
-
-        if (alreadyExists && !relink)
+        var ctx = new SyncContext
         {
-            skipped++;
-            continue;
-        }
+            Realm = realm,
+            LazerFilesPath = lazerFilesPath,
+            SongsPath = stableSongsPath,
+            StableRoot = stableRoot,
+            Relink = relink,
+        };
 
-        if (alreadyExists && relink)
+        foreach (var feature in features)
         {
-            // --relink 模式：对已有目录检查哪些文件是普通文件，替换为硬链接
-            Console.Write($"  [{idx}/{total}] [relink] {TruncateString(folderName, 55)}... ");
-            try
-            {
-                int replaced = RelinkBeatmapSet(set, lazerFilesPath, destDir);
-                if (replaced > 0)
-                {
-                    Console.ForegroundColor = ConsoleColor.Magenta;
-                    Console.WriteLine($"✓ 释放 {replaced} 个文件");
-                    Console.ResetColor();
-                    relinked++;
-                }
-                else
-                {
-                    Console.ForegroundColor = ConsoleColor.DarkGray;
-                    Console.WriteLine("已是硬链接，跳过");
-                    Console.ResetColor();
-                    skipped++;
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine($"✗ {ex.Message}");
-                Console.ResetColor();
-                failed++;
-            }
-            continue;
-        }
-
-        // 正常同步新铺面
-        Console.Write($"  [{idx}/{total}] {TruncateString(folderName, 60)}... ");
-        try
-        {
-            Directory.CreateDirectory(destDir);
-            SyncBeatmapSet(set, lazerFilesPath, destDir, hardLinksAvailable);
-
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("✓");
-            Console.ResetColor();
-            synced++;
-        }
-        catch (Exception ex)
-        {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"✗ {ex.Message}");
-            Console.ResetColor();
-            try { if (Directory.Exists(destDir)) Directory.Delete(destDir, true); } catch { }
-            failed++;
+            var stats = RunFeature(feature, ctx);
+            results.Add(stats);
+            Console.WriteLine();
         }
     }
 }
 catch (Exception ex)
 {
-    Console.ForegroundColor = ConsoleColor.Red;
-    Console.WriteLine($"\n读取数据库失败: {ex.Message}");
-    Console.WriteLine("\n提示: 请先关闭 osu! lazer 再运行本工具");
-    Console.ResetColor();
+    Ui.Error($"\n读取数据库失败: {ex.Message}");
+    Ui.Error("\n提示: 请先关闭 osu! lazer 再运行本工具");
     return 1;
 }
 
-// --- 5. 输出汇总 ---
-Console.WriteLine();
-Console.ForegroundColor = ConsoleColor.Cyan;
-Console.WriteLine("═══════════════════════════════════════");
-Console.WriteLine("  同步完成！");
-if (relink)
-    Console.WriteLine($"  新增: {synced}  重链接: {relinked}  跳过: {skipped}  失败: {failed}");
-else
-    Console.WriteLine($"  新增: {synced}  跳过: {skipped}  失败: {failed}");
-Console.WriteLine("═══════════════════════════════════════");
-Console.ResetColor();
-
-if (synced > 0 || relinked > 0)
-{
-    Console.ForegroundColor = ConsoleColor.Yellow;
-    Console.WriteLine("\n提示: 启动 osu!stable 后，按 F5 刷新铺面列表");
-    Console.ResetColor();
-}
+// --- 6. 输出汇总 ---
+PrintSummary(results);
 
 if (interactiveMode)
+    PauseBeforeExit();
+
+return results.Any(r => r.HasFailures) ? 2 : 0;
+
+// ================================================================
+//  调度
+// ================================================================
+
+SyncStats RunFeature(Feature feature, SyncContext ctx)
 {
-    Console.Write("\n按任意键退出...");
-    Console.ReadKey(true);
+    Ui.Accent($"【{FeatureName(feature)}】");
+    return feature switch
+    {
+        Feature.Skins => SkinSyncer.Run(ctx),
+        _ => BeatmapSyncer.Run(ctx),
+    };
 }
 
-return failed > 0 ? 2 : 0;
+static List<Feature> AllFeatures() => [Feature.Beatmaps, Feature.Skins];
 
-// ================================================================
-// 辅助方法
-// ================================================================
-
-static void PrintBanner()
+static string FeatureName(Feature feature) => feature switch
 {
-    Console.ForegroundColor = ConsoleColor.Magenta;
-    Console.WriteLine("╔══════════════════════════════════════════╗");
-    Console.WriteLine("║   osu! Lazer → Stable 铺面同步工具       ║");
-    Console.WriteLine("║   利用硬链接实现零磁盘占用同步           ║");
-    Console.WriteLine("╚══════════════════════════════════════════╝");
-    Console.ResetColor();
+    Feature.Beatmaps => "铺面",
+    Feature.Skins => "皮肤",
+    _ => feature.ToString(),
+};
+
+void PrintSummary(List<SyncStats> stats)
+{
+    Ui.Separator();
+    Ui.Info("  同步完成！");
+
+    foreach (var s in stats)
+        Console.WriteLine($"  {s.Label}    {s.Summary()}");
+
+    long linked = stats.Sum(f => f.FilesLinked);
+    long copied = stats.Sum(f => f.FilesCopied);
+    long relinked = stats.Sum(f => f.FilesRelinked);
+    long filesFailed = stats.Sum(f => f.FilesFailed);
+    long contentDiffer = stats.Sum(f => f.FilesContentDiffer);
+
+    if (linked + copied + relinked + contentDiffer + filesFailed > 0)
+    {
+        Console.WriteLine();
+        if (linked > 0) Console.WriteLine($"  新建硬链接: {linked} 个文件（零额外磁盘占用）");
+        if (relinked > 0) Console.WriteLine($"  替换为硬链接: {relinked} 个文件");
+        if (copied > 0) Ui.Warn($"  复制文件: {copied} 个（硬链接不可用，占用额外磁盘）");
+        if (contentDiffer > 0) Ui.Warn($"  内容不同未覆盖: {contentDiffer} 个文件（stable 里的版本可能被改过，保持原样）");
+        if (filesFailed > 0) Ui.Error($"  失败文件: {filesFailed} 个");
+    }
+
+    Ui.Separator();
+}
+
+static void PrintHelp()
+{
+    Console.WriteLine("用法:");
+    Console.WriteLine("  osu-AssetLinker [lazer目录] [Songs目录] [功能开关]");
     Console.WriteLine();
+    Console.WriteLine("参数:");
+    Console.WriteLine("  lazer目录    osu! lazer 数据目录（含 client.realm）");
+    Console.WriteLine("               留空则自动检测 %APPDATA%\\osu");
+    Console.WriteLine("  Songs目录    osu!stable 的 Songs 文件夹路径（也可以直接给 stable 根目录）");
+    Console.WriteLine("               留空则自动检测（读取 stable 配置文件）");
+    Console.WriteLine();
+    Console.WriteLine("功能开关（可组合，都不写时等同 --beats）:");
+    Console.WriteLine("  --beats        同步铺面到 Songs/");
+    Console.WriteLine("  --skins        同步皮肤到 Skins/");
+    Console.WriteLine("  --all          同步以上全部");
+    Console.WriteLine();
+    Console.WriteLine("其他选项:");
+    Console.WriteLine("  --relink       将 stable 中已有的普通文件替换为硬链接，释放磁盘空间");
+    Console.WriteLine("                 （要求两个目录在同一磁盘分区，硬链接才能生效）");
+    Console.WriteLine("  --help, -h     显示此帮助信息");
+    Console.WriteLine();
+    Console.WriteLine("示例:");
+    Console.WriteLine("  osu-AssetLinker");
+    Console.WriteLine("      自动检测路径，只同步铺面");
+    Console.WriteLine();
+    Console.WriteLine("  osu-AssetLinker --all --relink");
+    Console.WriteLine("      同步全部内容，并把已有的普通文件替换为硬链接");
+    Console.WriteLine();
+    Console.WriteLine("  osu-AssetLinker \"C:\\Users\\你\\AppData\\Roaming\\osu\" \"C:\\osu!\\Songs\" --skins");
+    Console.WriteLine("      手动指定路径，只同步皮肤");
+    Console.WriteLine();
+    Console.WriteLine("说明:");
+    Console.WriteLine("  · 同一分区时使用硬链接，文件不会被复制，磁盘占用为零");
+    Console.WriteLine("  · 不同分区时回退为复制，占用额外磁盘空间");
+    Console.WriteLine("  · 运行前请关闭 osu! lazer（Realm 数据库需要独占访问）");
+    Console.WriteLine("  · 同步完成后在 stable 中按 F5 刷新铺面列表");
 }
+
+// ================================================================
+//  路径检测
+// ================================================================
 
 static string? DetectLazerDataPath()
 {
@@ -326,35 +281,49 @@ static string? DetectLazerDataPath()
 static string? DetectStableSongsPath()
 {
     string[] candidates =
-    {
+    [
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "osu!", "Songs"),
         @"C:\osu!\Songs",
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "osu!", "Songs"),
-    };
+    ];
     foreach (var c in candidates)
         if (Directory.Exists(c)) return c;
 
     string stableDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "osu!");
-    if (Directory.Exists(stableDir))
+    if (!Directory.Exists(stableDir))
+        return null;
+
+    string? cfg = Directory.GetFiles(stableDir, $"osu!.{Environment.UserName}.cfg").FirstOrDefault()
+               ?? Directory.GetFiles(stableDir, "osu!.*.cfg").FirstOrDefault();
+
+    if (cfg != null)
     {
-        string? cfg = Directory.GetFiles(stableDir, $"osu!.{Environment.UserName}.cfg").FirstOrDefault()
-                   ?? Directory.GetFiles(stableDir, "osu!.*.cfg").FirstOrDefault();
-        if (cfg != null)
+        foreach (var line in File.ReadAllLines(cfg))
         {
-            foreach (var line in File.ReadAllLines(cfg))
-            {
-                if (!line.StartsWith("BeatmapDirectory", StringComparison.OrdinalIgnoreCase)) continue;
-                string customPath = line.Split('=').Last().Trim();
-                if (Path.IsPathRooted(customPath) && Directory.Exists(customPath)) return customPath;
-                string abs = Path.Combine(stableDir, customPath);
-                if (Directory.Exists(abs)) return abs;
-                break;
-            }
+            if (!line.StartsWith("BeatmapDirectory", StringComparison.OrdinalIgnoreCase)) continue;
+            string customPath = line.Split('=').Last().Trim();
+            if (Path.IsPathRooted(customPath) && Directory.Exists(customPath)) return customPath;
+            string abs = Path.Combine(stableDir, customPath);
+            if (Directory.Exists(abs)) return abs;
+            break;
         }
-        string defaultSongs = Path.Combine(stableDir, "Songs");
-        if (Directory.Exists(defaultSongs)) return defaultSongs;
     }
-    return null;
+
+    string defaultSongs = Path.Combine(stableDir, "Songs");
+    return Directory.Exists(defaultSongs) ? defaultSongs : null;
+}
+
+/// <summary>允许直接传 stable 根目录（会自动补上 Songs）。</summary>
+static string ResolveSongsPath(string input)
+{
+    string path = input.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+    if (path.Length == 0) path = input;
+
+    if (Path.GetFileName(path).Equals("Songs", StringComparison.OrdinalIgnoreCase))
+        return path;
+
+    string sub = Path.Combine(path, "Songs");
+    return Directory.Exists(sub) ? sub : path;
 }
 
 static string? FindRealmFile(string lazerPath)
@@ -364,213 +333,9 @@ static string? FindRealmFile(string lazerPath)
     return Directory.GetFiles(lazerPath, "client*.realm").OrderByDescending(f => f).FirstOrDefault();
 }
 
-static string BuildStableFolderName(BeatmapSetInfo set, int maxLength = 200)
-{
-    var meta = set.Beatmaps.FirstOrDefault()?.Metadata;
-    string artist = SanitizeName(meta?.Artist ?? "Unknown Artist");
-    string title = SanitizeName(meta?.Title ?? "Unknown Title");
-    string onlineId = set.OnlineID > 0 ? set.OnlineID.ToString() : set.ID.ToString()[..8];
-    string name = $"{onlineId} {artist} - {title}";
-    if (name.Length > maxLength)
-        name = name[..maxLength].TrimEnd().TrimEnd('.');
-    return name;
-}
-
-static string SanitizeName(string name)
-{
-    char[] invalid = Path.GetInvalidFileNameChars();
-    var sb = new StringBuilder();
-    foreach (char c in name)
-        sb.Append(Array.IndexOf(invalid, c) >= 0 ? '_' : c);
-    // Windows 不允许文件名/目录名以 '.' 或 ' ' 结尾
-    return sb.ToString().Trim().TrimEnd('.');
-}
-
-/// <summary>
-/// 对铺面内部文件路径的每个分量分别做非法字符替换 + 结尾点号清理。
-/// </summary>
-static string SanitizeFilePath(string relativePath)
-{
-    var parts = relativePath.Split('/');
-    char[] invalid = Path.GetInvalidFileNameChars();
-    for (int i = 0; i < parts.Length; i++)
-    {
-        var sb = new StringBuilder();
-        foreach (char c in parts[i])
-            sb.Append(Array.IndexOf(invalid, c) >= 0 ? '_' : c);
-        parts[i] = sb.ToString().Trim().TrimEnd('.');
-        if (string.IsNullOrEmpty(parts[i])) parts[i] = "_";
-    }
-    return string.Join(Path.DirectorySeparatorChar, parts);
-}
-
-/// <summary>
-/// 若完整路径超过 Windows MAX_PATH (260) 限制，截断文件名部分（保留扩展名）。
-/// </summary>
-static string TruncatePathForStable(string destPath, int maxTotal = 259)
-{
-    if (destPath.Length <= maxTotal)
-        return destPath;
-
-    string dir = Path.GetDirectoryName(destPath)!;
-    string nameNoExt = Path.GetFileNameWithoutExtension(destPath);
-    string ext = Path.GetExtension(destPath);
-    int maxNameLen = maxTotal - dir.Length - 1 - ext.Length;
-
-    if (maxNameLen < 5)
-        throw new PathTooLongException($"路径过长，无法安全截断: {destPath}");
-
-    string truncated = Path.Combine(dir, nameNoExt[..maxNameLen].TrimEnd().TrimEnd('.') + ext);
-
-    // 避免截断后与已有文件冲突
-    int counter = 2;
-    while (File.Exists(truncated))
-    {
-        string suffix = $" ({counter})";
-        int adjLen = maxNameLen - suffix.Length;
-        if (adjLen < 1) adjLen = 1;
-        truncated = Path.Combine(dir, nameNoExt[..adjLen].TrimEnd().TrimEnd('.') + suffix + ext);
-        counter++;
-    }
-
-    return truncated;
-}
-
-static bool CheckAlreadySynced(string destDir, BeatmapSetInfo set)
-{
-    if (!Directory.Exists(destDir)) return false;
-    return Directory.GetFiles(destDir, "*.osu").Length > 0;
-}
-
-/// <summary>
-/// 正常同步一个铺面集（新增，使用硬链接或复制）。
-/// </summary>
-static void SyncBeatmapSet(BeatmapSetInfo set, string lazerFilesPath, string destDir, bool useHardLinks)
-{
-    foreach (var namedFile in set.Files)
-    {
-        if (namedFile.File == null) continue;
-
-        string hash = namedFile.File!.Hash;
-        string sourcePath = Path.Combine(lazerFilesPath, hash[..1], hash[..2], hash);
-
-        if (!File.Exists(sourcePath))
-            throw new FileNotFoundException($"Lazer 文件缺失: {sourcePath}");
-
-        string sanitizedRelPath = SanitizeFilePath(namedFile.Filename);
-        string destPath = TruncatePathForStable(Path.Combine(destDir, sanitizedRelPath));
-
-        string? subDir = Path.GetDirectoryName(destPath);
-        if (subDir != null && !Directory.Exists(subDir))
-            Directory.CreateDirectory(subDir);
-
-        if (File.Exists(destPath)) continue;
-
-        if (useHardLinks)
-        {
-            if (!TryCreateHardLink(destPath, sourcePath))
-                File.Copy(sourcePath, destPath);
-        }
-        else
-        {
-            File.Copy(sourcePath, destPath);
-        }
-    }
-}
-
-/// <summary>
-/// --relink 模式：遍历铺面集中每个文件，若 stable 里是普通文件（非硬链接）
-/// 则删除后用硬链接替换，返回实际替换的文件数。
-/// </summary>
-static int RelinkBeatmapSet(BeatmapSetInfo set, string lazerFilesPath, string destDir)
-{
-    int replaced = 0;
-
-    foreach (var namedFile in set.Files)
-    {
-        if (namedFile.File == null) continue;
-
-        string hash = namedFile.File!.Hash;
-        string sourcePath = Path.Combine(lazerFilesPath, hash[..1], hash[..2], hash);
-
-        if (!File.Exists(sourcePath)) continue; // lazer 文件不存在则跳过
-
-        string sanitizedRelPath = SanitizeFilePath(namedFile.Filename);
-        string destPath = TruncatePathForStable(Path.Combine(destDir, sanitizedRelPath));
-
-        if (!File.Exists(destPath)) continue; // stable 文件不存在则跳过（不补充）
-
-        // 检查是否已是硬链接（链接数 > 1 说明已链接，跳过）
-        if (GetHardLinkCount(destPath) > 1) continue;
-
-        // 是普通文件：删除后重建为硬链接
-        File.Delete(destPath);
-        if (!TryCreateHardLink(destPath, sourcePath))
-        {
-            // 硬链接失败（理论上不应发生，因为检测已通过），回退复制
-            File.Copy(sourcePath, destPath);
-        }
-        else
-        {
-            replaced++;
-        }
-    }
-
-    return replaced;
-}
-
-/// <summary>
-/// 获取文件的硬链接数（Windows 专用）。
-/// </summary>
-static int GetHardLinkCount(string filePath)
-{
-    if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        return 1;
-
-    var handle = CreateFile(filePath, 0x80000000, 3, IntPtr.Zero, 3, 0x80, IntPtr.Zero);
-    if (handle == new IntPtr(-1)) return 1;
-
-    try
-    {
-        if (GetFileInformationByHandle(handle, out var info))
-            return (int)info.NumberOfLinks;
-        return 1;
-    }
-    finally
-    {
-        CloseHandle(handle);
-    }
-}
-
-static bool CheckHardLinkAvailability(string sourcePath, string destPath)
-{
-    if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return false;
-    string testSrc = Path.Combine(sourcePath, "_hl_test_src");
-    string testDst = Path.Combine(destPath, "_hl_test_dst");
-    try
-    {
-        File.WriteAllText(testSrc, "");
-        return TryCreateHardLink(testDst, testSrc);
-    }
-    catch { return false; }
-    finally
-    {
-        try { File.Delete(testSrc); } catch { }
-        try { File.Delete(testDst); } catch { }
-    }
-}
-
-static bool TryCreateHardLink(string dest, string src)
-{
-    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        return CreateHardLink(dest, src, IntPtr.Zero);
-    if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) || RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-        return link(src, dest) == 0;
-    return false;
-}
-
-static string TruncateString(string s, int maxLen)
-    => s.Length <= maxLen ? s : s[..maxLen] + "…";
+// ================================================================
+//  交互模式
+// ================================================================
 
 static bool IsInteractiveMode()
 {
@@ -580,20 +345,20 @@ static bool IsInteractiveMode()
     return GetConsoleProcessList(list, 1) <= 1;
 }
 
-static void InteractivePrompt(string? detectedLazer, string? detectedStable, out string? lazerPath, out string? stablePath, out bool relinkMode)
+/// <summary>交互式提问，返回用户是否确认执行。</summary>
+static bool InteractivePrompt(string? detectedLazer, string? detectedStable,
+    out string? lazerPath, out string? stablePath, out bool relinkMode, List<Feature> features)
 {
     Console.WriteLine("交互模式（双击运行）\n");
 
-    lazerPath = null;
-    stablePath = null;
-    relinkMode = false;
-
+    // --- Lazer 数据目录 ---
     if (detectedLazer != null)
         Console.WriteLine($"[自动检测] Lazer 数据目录: {detectedLazer}");
 
-    do
+    lazerPath = null;
+    while (lazerPath == null)
     {
-        Console.Write("请输入 Lazer 数据目录路径（留空自动检测）: ");
+        Console.Write("请输入 Lazer 数据目录路径（留空使用检测到的）: ");
         string? input = Console.ReadLine()?.Trim();
         lazerPath = string.IsNullOrEmpty(input) ? detectedLazer : input;
 
@@ -605,113 +370,107 @@ static void InteractivePrompt(string? detectedLazer, string? detectedStable, out
 
         if (FindRealmFile(lazerPath) == null)
         {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"错误: 在 '{lazerPath}' 中找不到 client.realm 文件");
-            Console.ResetColor();
+            Ui.Error($"错误: 在 '{lazerPath}' 中找不到 client.realm 文件");
             lazerPath = null;
         }
-    } while (lazerPath == null);
+    }
 
+    // --- Stable Songs 目录 ---
     if (detectedStable != null)
         Console.WriteLine($"[自动检测] Stable Songs 目录: {detectedStable}");
 
-    do
+    stablePath = null;
+    while (stablePath == null)
     {
-        Console.Write("请输入 Stable Songs 目录路径（留空自动检测）: ");
+        Console.Write("请输入 Stable Songs 目录路径（留空使用检测到的）: ");
         string? input = Console.ReadLine()?.Trim();
         stablePath = string.IsNullOrEmpty(input) ? detectedStable : input;
 
         if (stablePath == null)
-        {
             Console.WriteLine("自动检测失败，请手动输入路径");
-        }
-    } while (stablePath == null);
+    }
 
-    Console.Write("\n是否启用 --relink 模式？（释放磁盘空间）[y/N]: ");
-    string? relinkInput = Console.ReadLine()?.Trim().ToLower();
-    relinkMode = relinkInput == "y" || relinkInput == "yes";
+    // --- 要同步的内容（多选）---
+    Console.WriteLine("\n要同步哪些内容？（可多选）");
+    features.Clear();
+    if (Ask("  同步铺面 → Songs/", true)) features.Add(Feature.Beatmaps);
+    if (Ask("  同步皮肤 → Skins/", false)) features.Add(Feature.Skins);
+
+    if (features.Count == 0)
+    {
+        Ui.Warn("  没有选择任何内容，默认只同步铺面。");
+        features.Add(Feature.Beatmaps);
+    }
+
+    // --- relink ---
+    Console.WriteLine();
+    Ui.Dim("  --relink 会把 stable 里已有的【普通文件】替换为硬链接，释放重复占用的磁盘空间。");
+    Ui.Dim("  替换前会逐字节比对（文件长度 + SHA-256），内容不同的文件不会被覆盖。");
+    relinkMode = Ask("是否启用 --relink？", false);
+
+    // --- 执行前确认 ---
+    string songsPath = ResolveSongsPath(stablePath);
+    string stableRoot = Path.GetDirectoryName(songsPath) ?? songsPath;
 
     Console.WriteLine();
+    Ui.Separator();
+    Ui.Info("  请确认以下操作：");
+    Console.WriteLine($"    Lazer 数据目录 : {lazerPath}   （只读）");
+    Console.WriteLine($"    Stable 数据目录: {stableRoot}");
+    if (features.Contains(Feature.Beatmaps))
+        Console.WriteLine($"    铺面           : {songsPath}");
+    if (features.Contains(Feature.Skins))
+        Console.WriteLine($"    皮肤           : {Path.Combine(stableRoot, "Skins")}");
+    Console.WriteLine($"    relink 模式    : {(relinkMode ? "开（普通文件会替换为硬链接）" : "关")}");
+    Ui.Separator();
+
+    if (!Ask("\n确认开始？", true))
+        return false;
+
+    Console.WriteLine();
+    return true;
+}
+
+/// <summary>双击运行时暂停，让用户能看到结果。输入被重定向时 ReadKey 不可用，直接跳过。</summary>
+static void PauseBeforeExit()
+{
+    if (Console.IsInputRedirected)
+        return;
+
+    Console.Write("\n按任意键退出...");
+
+    try
+    {
+        Console.ReadKey(true);
+    }
+    catch (InvalidOperationException)
+    {
+        // 没有控制台（例如被计划任务拉起），忽略即可
+    }
+}
+
+/// <summary>y/N 提问，输入为空时返回 <paramref name="defaultValue"/>。</summary>
+static bool Ask(string prompt, bool defaultValue)
+{
+    Console.Write($"{prompt} [{(defaultValue ? "Y/n" : "y/N")}]: ");
+    string input = Console.ReadLine()?.Trim().ToLowerInvariant() ?? string.Empty;
+
+    if (string.IsNullOrEmpty(input))
+        return defaultValue;
+
+    return input is "y" or "yes";
 }
 
 // ── Windows 原生 API ─────────────────────────────────────────
-[DllImport("Kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-static extern bool CreateHardLink(string lpFileName, string lpExistingFileName, IntPtr lpSecurityAttributes);
-
-[DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-static extern IntPtr CreateFile(string lpFileName, uint dwAccess, uint dwShare,
-    IntPtr lpSA, uint dwCreation, uint dwFlags, IntPtr hTemplate);
-
-[DllImport("kernel32.dll", SetLastError = true)]
-static extern bool GetFileInformationByHandle(IntPtr handle, out ByHandleFileInformation lpInfo);
-
-[DllImport("kernel32.dll", SetLastError = true)]
-static extern bool CloseHandle(IntPtr hObject);
-
 [DllImport("kernel32.dll")]
 static extern uint GetConsoleProcessList(uint[] processList, uint processCount);
 
-[DllImport("libc", SetLastError = true)]
-static extern int link(string oldpath, string newpath);
+// ================================================================
+//  功能开关
+// ================================================================
 
-[StructLayout(LayoutKind.Sequential)]
-struct ByHandleFileInformation
+enum Feature
 {
-    public uint FileAttributes;
-    public System.Runtime.InteropServices.ComTypes.FILETIME CreationTime;
-    public System.Runtime.InteropServices.ComTypes.FILETIME LastAccessTime;
-    public System.Runtime.InteropServices.ComTypes.FILETIME LastWriteTime;
-    public uint VolumeSerialNumber;
-    public uint FileSizeHigh;
-    public uint FileSizeLow;
-    public uint NumberOfLinks;
-    public uint FileIndexHigh;
-    public uint FileIndexLow;
-}
-
-// ── Realm 模型定义 ───────────────────────────────────────────────
-
-[MapTo("BeatmapSet")]
-public partial class BeatmapSetInfo : RealmObject
-{
-    [PrimaryKey] public Guid ID { get; set; } = Guid.NewGuid();
-    public int OnlineID { get; set; } = -1;
-    public bool DeletePending { get; set; }
-    public IList<BeatmapInfo> Beatmaps { get; } = null!;
-    public IList<RealmNamedFileUsage> Files { get; } = null!;
-}
-
-[MapTo("Beatmap")]
-public partial class BeatmapInfo : RealmObject
-{
-    [PrimaryKey] public Guid ID { get; set; } = Guid.NewGuid();
-    public BeatmapMetadata? Metadata { get; set; }
-    public BeatmapSetInfo? BeatmapSet { get; set; }
-    public string DifficultyName { get; set; } = string.Empty;
-}
-
-[MapTo("BeatmapMetadata")]
-public partial class BeatmapMetadata : RealmObject
-{
-    public string Title { get; set; } = string.Empty;
-    public string TitleUnicode { get; set; } = string.Empty;
-    public string Artist { get; set; } = string.Empty;
-    public string ArtistUnicode { get; set; } = string.Empty;
-    public string Source { get; set; } = string.Empty;
-    public string Tags { get; set; } = string.Empty;
-    public string AudioFile { get; set; } = string.Empty;
-    public string BackgroundFile { get; set; } = string.Empty;
-}
-
-[MapTo("File")]
-public partial class RealmFile : RealmObject
-{
-    [PrimaryKey] public string Hash { get; set; } = string.Empty;
-}
-
-// EmbeddedObject：无 MapTo，Realm 直接使用类名 "RealmNamedFileUsage"
-public class RealmNamedFileUsage : EmbeddedObject
-{
-    public string Filename { get; set; } = string.Empty;
-    public RealmFile? File { get; set; }
+    Beatmaps,
+    Skins,
 }
