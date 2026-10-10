@@ -27,12 +27,12 @@ osu!lazer 把铺面、皮肤等文件以内容哈希（SHA-256）存储在 `file
 ## 系统要求
 
 - Windows（硬链接 API 为 Windows 专用）
-- [.NET 8.0](https://dotnet.microsoft.com/download/dotnet/8.0) 运行时
+- [.NET 10.0](https://dotnet.microsoft.com/download/dotnet/10.0) 运行时
 - osu!lazer 和 osu!stable 的数据目录在**同一磁盘分区**（硬链接要求）
 
 ## 安装
 
-从 [Releases](https://github.com/tkw6688/osu-AssetLinker/releases) 下载 `osu-AssetLinker.exe`，放到任意目录运行即可（需要上面的 .NET 8.0 运行时）。
+从 [Releases](https://github.com/tkw6688/osu-AssetLinker/releases) 下载 `osu-AssetLinker.exe`，放到任意目录运行即可（需要上面的 .NET 10.0 运行时）。
 
 ## 用法
 
@@ -125,11 +125,11 @@ osu-AssetLinker "D:\osu-lazer" "D:\osu-stable\Songs" --all --relink
 # 调试构建
 dotnet build -c Release
 
-# 发布单文件
-dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:PublishReadyToRun=false -o publish
+# 发布单文件（框架依赖，发布选项已配置在 csproj 里）
+dotnet publish -c Release -o publish
 ```
 
-发布产物位于 `publish/osu-AssetLinker.exe`。（用 `-p:` 而不是 `/p:`，这样在 Git Bash 里也不会被当成路径转换掉。）
+发布产物位于 `publish/osu-AssetLinker.exe`（单文件，约 7 MB，不内置运行时）。
 
 仓库里的 `osu/` 是 osu!lazer 源码，仅供对照查阅，已在 `osu-AssetLinker.csproj` 里排除，不参与编译。
 
