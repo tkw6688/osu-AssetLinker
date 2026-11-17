@@ -5,6 +5,9 @@ public static class BeatmapSyncer
 {
     public static SyncStats Run(SyncContext ctx)
     {
+        string songsPath = ctx.SongsPath
+            ?? throw new InvalidOperationException("铺面同步需要 Songs 目录，但当前同步上下文未配置。");
+
         var stats = new SyncStats { Label = "铺面" };
         var sets = ctx.Realm.All<BeatmapSetInfo>().Where(s => !s.DeletePending).ToList();
         stats.Total = sets.Count;
@@ -22,10 +25,10 @@ public static class BeatmapSyncer
                 .DefaultIfEmpty(0)
                 .Max();
             // 总路径 = Songs + '\' + folderName + '\' + fileName <= 259
-            int maxFolderLen = Math.Clamp(PathHelper.MaxPath - ctx.SongsPath.Length - 1 - longestFileLen - 1, 20, 200);
+            int maxFolderLen = Math.Clamp(PathHelper.MaxPath - songsPath.Length - 1 - longestFileLen - 1, 20, 200);
 
             string folderName = PathHelper.BuildBeatmapFolderName(set, maxFolderLen);
-            string destDir = Path.Combine(ctx.SongsPath, folderName);
+            string destDir = Path.Combine(songsPath, folderName);
             bool alreadyExists = IsAlreadySynced(destDir);
 
             if (alreadyExists && !ctx.Relink)

@@ -8,7 +8,7 @@
 
 | 内容 | 开关 | 说明 |
 |------|------|------|
-| 铺面 | `--beats` | lazer 的铺面集 → stable 的 `Songs/` |
+| 铺面 | `--beats` | lazer 的铺面集 → stable 的 Songs 目录（优先使用配置里的 `BeatmapDirectory`，默认 `<stable>\Songs`） |
 | 皮肤 | `--skins` | lazer 中已导入的皮肤 → stable 的 `Skins/` |
 | 全部 | `--all` | 以上全部 |
 
@@ -40,30 +40,35 @@ osu!lazer 把铺面、皮肤等文件以内容哈希（SHA-256）存储在 `file
 
 直接双击 `osu-AssetLinker.exe`（不传任何参数）进入向导：
 
-1. 依次确认 lazer 数据目录和 stable 的 `Songs` 目录（留空使用自动检测结果）
+1. 依次确认 lazer 数据目录和 **osu!stable 根目录**（含 `osu!.exe` / `Songs` / `Skins`；留空使用自动检测结果）
 2. 选择要同步的内容（铺面 / 皮肤，可多选）
-3. 选择是否启用 `--relink`
-4. 查看操作摘要，确认后才开始执行
+3. 若选择了铺面，自动解析 Songs 目录（优先读取 stable 配置里的 `BeatmapDirectory`，没有配置时使用 `<stable>\Songs`；找不到时会让你重选或创建）
+4. 选择是否启用 `--relink`
+5. 查看操作摘要，确认后才开始执行
 
 ### 命令行
 
 ```
-osu-AssetLinker [lazer目录] [Songs目录] [功能开关] [其他选项]
+osu-AssetLinker [--lazer-dir <目录>] [--stable-dir <目录>] [功能开关] [其他选项]
 ```
 
 #### 参数
 
 | 参数 | 说明 |
 |------|------|
-| `lazer目录` | osu!lazer 数据目录（包含 `client.realm`），留空自动检测 `%APPDATA%\osu`。若 lazer 设置了自定义数据目录，会读取 `storage.ini` 自动跟随 |
-| `Songs目录` | osu!stable 的 `Songs` 文件夹路径，也可以直接给 stable 根目录。留空自动检测 |
+| `--lazer-dir` | osu!lazer 数据目录（包含 `client.realm`），省略则自动检测 `%APPDATA%\osu`。若 lazer 设置了自定义数据目录，会读取 `storage.ini` 自动跟随 |
+| `--stable-dir` | osu!stable 根目录（包含 `osu!.exe` / `Songs` / `Skins` / `osu!*.cfg`），省略则自动检测。也接受 `Songs` 或 `Skins` 目录，会自动改用其父目录 |
+
+> 旧的位置参数 `[lazer目录] [Songs目录]` 已移除，请改用 `--lazer-dir` / `--stable-dir`。
+
+铺面目标优先使用 stable 用户配置 `osu!.{用户名}.cfg` 里的 `BeatmapDirectory`（默认值 `Songs`，相对 stable 根目录解析）；没有可用配置时才使用 `<stable-dir>\Songs`。皮肤固定写入 `<stable-dir>\Skins`。
 
 #### 功能开关
 
 | 选项 | 说明 |
 |------|------|
-| `--beats` | 同步铺面到 `Songs/` |
-| `--skins` | 同步皮肤到 `Skins/` |
+| `--beats` | 同步铺面到 stable 的 Songs 目录（优先使用配置里的 `BeatmapDirectory`） |
+| `--skins` | 同步皮肤到 `<stable-dir>\Skins` |
 | `--all` | 同步以上全部 |
 
 #### 其他选项
@@ -86,10 +91,10 @@ osu-AssetLinker --skins
 osu-AssetLinker --all --relink
 
 # 手动指定路径
-osu-AssetLinker "C:\Users\你的用户名\AppData\Roaming\osu" "C:\osu!\Songs" --skins
+osu-AssetLinker --lazer-dir "C:\Users\你的用户名\AppData\Roaming\osu" --stable-dir "C:\osu!" --skins
 
 # 手动指定路径 + 重链接
-osu-AssetLinker "D:\osu-lazer" "D:\osu-stable\Songs" --all --relink
+osu-AssetLinker --lazer-dir "D:\osu-lazer" --stable-dir "D:\osu-stable" --all --relink
 ```
 
 ## 注意事项
@@ -101,7 +106,7 @@ osu-AssetLinker "D:\osu-lazer" "D:\osu-stable\Songs" --all --relink
 5. 如果 lazer 中删除了某个铺面，stable 中已存在的硬链接仍然有效（只要 lazer 的源文件未被删除），但不会自动清理。需要手动删除 stable 中对应的文件夹。
 6. Windows 路径最长支持 260 字符（`MAX_PATH`）。本工具会自动检测并截断过长的文件名，确保不超出限制。
 7. 本工具只读取 lazer 的数据，**绝不写入**。
-8. 如果 lazer 改过自定义数据目录，`%APPDATA%\osu` 里可能只剩 `client.realm.lock`、`client.realm.management`、`storage.ini` 等残留文件，数据库本体在别处。工具会自动读取 `storage.ini` 的 `FullPath` 跟随过去；也可以直接把自定义目录作为 `lazer目录` 传入。
+8. 如果 lazer 改过自定义数据目录，`%APPDATA%\osu` 里可能只剩 `client.realm.lock`、`client.realm.management`、`storage.ini` 等残留文件，数据库本体在别处。工具会自动读取 `storage.ini` 的 `FullPath` 跟随过去；也可以用 `--lazer-dir` 直接指定自定义目录。
 
 ## 行为说明
 
@@ -153,6 +158,8 @@ Sync/BeatmapSyncer.cs   铺面同步
 Sync/SkinSyncer.cs      皮肤同步
 Util/HardLink.cs        硬链接原生 API、卷判断
 Util/FileSync.cs        单个文件的链接/复制/重链接策略（含内容校验）
+Util/LazerData.cs       lazer 数据目录 / storage.ini / Realm 文件定位
+Util/StableData.cs      stable 根目录、cfg（BeatmapDirectory）与 Songs 解析
 Util/LazerFileStore.cs  lazer 文件仓库的哈希路径解析
 Util/PathHelper.cs      文件名清洗、MAX_PATH 截断
 Util/Ui.cs              控制台输出
