@@ -50,7 +50,7 @@ if (interactiveMode)
 }
 else if (pathArgs.Length >= 2)
 {
-    lazerDataPath = pathArgs[0];
+    lazerDataPath = ResolveLazerDataPath(pathArgs[0]);
     stableSongsPath = pathArgs[1];
 }
 else
@@ -78,10 +78,12 @@ if (relink)
 Console.WriteLine();
 
 // --- 2. 验证路径 ---
-string? realmFile = FindRealmFile(lazerDataPath!);
+string? realmFile = LazerData.FindRealmFile(lazerDataPath!);
 if (realmFile == null)
 {
     Ui.Error($"错误: 在 '{lazerDataPath}' 中找不到 client.realm 文件");
+    if (LazerData.DescribeMissingRealm(lazerDataPath!) is { } hint)
+        Ui.Dim(hint);
     return 1;
 }
 
@@ -235,6 +237,7 @@ static void PrintHelp()
     Console.WriteLine("参数:");
     Console.WriteLine("  lazer目录    osu! lazer 数据目录（含 client.realm）");
     Console.WriteLine("               留空则自动检测 %APPDATA%\\osu");
+    Console.WriteLine("               （若 lazer 改过自定义数据目录，会读取 storage.ini 自动跟随）");
     Console.WriteLine("  Songs目录    osu!stable 的 Songs 文件夹路径（也可以直接给 stable 根目录）");
     Console.WriteLine("               留空则自动检测（读取 stable 配置文件）");
     Console.WriteLine();
@@ -269,12 +272,28 @@ static void PrintHelp()
 //  路径检测
 // ================================================================
 
+/// <summary>跟随 storage.ini 里的自定义数据目录；发生切换时打印提示。</summary>
+static string ResolveLazerDataPath(string candidate)
+{
+    string resolved = LazerData.ResolveDataDirectory(candidate, out bool redirected);
+    if (redirected)
+        Ui.Info($"[数据目录] 按 storage.ini 使用自定义数据目录: {resolved}");
+    return resolved;
+}
+
 static string? DetectLazerDataPath()
 {
-    string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-    string candidate = Path.Combine(appData, "osu");
-    if (File.Exists(Path.Combine(candidate, "client.realm")))
-        return candidate;
+    string candidate = LazerData.DefaultDirectory;
+    if (!Directory.Exists(candidate))
+        return null;
+
+    string resolved = ResolveLazerDataPath(candidate);
+
+    // 即使 client.realm 不在，只要目录里有 lazer 的痕迹也返回，
+    // 让后续检查给出具体原因，而不是笼统的「自动检测失败」。
+    if (LazerData.FindRealmFile(resolved) != null || LazerData.LooksLikeLazerDataDirectory(resolved))
+        return resolved;
+
     return null;
 }
 
@@ -326,13 +345,6 @@ static string ResolveSongsPath(string input)
     return Directory.Exists(sub) ? sub : path;
 }
 
-static string? FindRealmFile(string lazerPath)
-{
-    string direct = Path.Combine(lazerPath, "client.realm");
-    if (File.Exists(direct)) return direct;
-    return Directory.GetFiles(lazerPath, "client*.realm").OrderByDescending(f => f).FirstOrDefault();
-}
-
 // ================================================================
 //  交互模式
 // ================================================================
@@ -360,19 +372,25 @@ static bool InteractivePrompt(string? detectedLazer, string? detectedStable,
     {
         Console.Write("请输入 Lazer 数据目录路径（留空使用检测到的）: ");
         string? input = Console.ReadLine()?.Trim();
-        lazerPath = string.IsNullOrEmpty(input) ? detectedLazer : input;
+        string? candidate = string.IsNullOrEmpty(input) ? detectedLazer : input;
 
-        if (lazerPath == null)
+        if (candidate == null)
         {
             Console.WriteLine("自动检测失败，请手动输入路径");
             continue;
         }
 
-        if (FindRealmFile(lazerPath) == null)
+        string resolved = ResolveLazerDataPath(candidate);
+
+        if (LazerData.FindRealmFile(resolved) == null)
         {
-            Ui.Error($"错误: 在 '{lazerPath}' 中找不到 client.realm 文件");
-            lazerPath = null;
+            Ui.Error($"错误: 在 '{resolved}' 中找不到 client.realm 文件");
+            if (LazerData.DescribeMissingRealm(resolved) is { } hint)
+                Ui.Dim(hint);
+            continue;
         }
+
+        lazerPath = resolved;
     }
 
     // --- Stable Songs 目录 ---

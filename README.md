@@ -55,7 +55,7 @@ osu-AssetLinker [lazer目录] [Songs目录] [功能开关] [其他选项]
 
 | 参数 | 说明 |
 |------|------|
-| `lazer目录` | osu!lazer 数据目录（包含 `client.realm`），留空自动检测 `%APPDATA%\osu` |
+| `lazer目录` | osu!lazer 数据目录（包含 `client.realm`），留空自动检测 `%APPDATA%\osu`。若 lazer 设置了自定义数据目录，会读取 `storage.ini` 自动跟随 |
 | `Songs目录` | osu!stable 的 `Songs` 文件夹路径，也可以直接给 stable 根目录。留空自动检测 |
 
 #### 功能开关
@@ -101,6 +101,7 @@ osu-AssetLinker "D:\osu-lazer" "D:\osu-stable\Songs" --all --relink
 5. 如果 lazer 中删除了某个铺面，stable 中已存在的硬链接仍然有效（只要 lazer 的源文件未被删除），但不会自动清理。需要手动删除 stable 中对应的文件夹。
 6. Windows 路径最长支持 260 字符（`MAX_PATH`）。本工具会自动检测并截断过长的文件名，确保不超出限制。
 7. 本工具只读取 lazer 的数据，**绝不写入**。
+8. 如果 lazer 改过自定义数据目录，`%APPDATA%\osu` 里可能只剩 `client.realm.lock`、`client.realm.management`、`storage.ini` 等残留文件，数据库本体在别处。工具会自动读取 `storage.ini` 的 `FullPath` 跟随过去；也可以直接把自定义目录作为 `lazer目录` 传入。
 
 ## 行为说明
 
