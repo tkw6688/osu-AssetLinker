@@ -1,127 +1,102 @@
 # osu! Lazer → Stable 数据同步工具
 
-把 osu!lazer 的数据同步到 osu!stable，利用**硬链接（hard link）**实现零额外磁盘占用。
+把 osu!lazer 的铺面和皮肤同步到 osu!stable，利用**硬链接（hard link）**实现零额外磁盘占用。
 
-> 反方向（stable → lazer）不需要本工具 —— osu!lazer 自带从 stable 导入内容的功能（首次设置向导里的「Import」步骤），同样是硬链接、零额外占用。
+> 反方向（stable → lazer）不需要本工具：osu!lazer 自带从 stable 导入内容的功能（首次设置向导里的「Import」步骤），同样是硬链接、零额外占用。
 
 ## 能同步的内容
 
 | 内容 | 开关 | 说明 |
 |------|------|------|
-| 铺面 | `--beats` | lazer 的铺面集 → stable 的 Songs 目录（优先使用配置里的 `BeatmapDirectory`，默认 `<stable>\Songs`） |
+| 铺面 | `--beats`（默认） | lazer 的铺面集 → stable 的 Songs 目录 |
 | 皮肤 | `--skins` | lazer 中已导入的皮肤 → stable 的 `Skins/` |
-| 全部 | `--all` | 以上全部 |
+| 全部 | `--all` | 铺面 + 皮肤 |
 
-不加任何开关时默认只同步铺面。
-
-**暂不支持**：回放（`.osr`）和收藏夹（`collection.db`）。stable 不会自动加载放进 `Replays/` 的回放，只能在 stable 里手动导入；收藏夹需要在 stable 里重建。
+**暂不支持**：回放（`.osr`）和收藏夹（`collection.db`）。stable 不会自动加载放进 `Replays/` 的回放；收藏夹需要在 stable 里重建。
 
 ## 原理
 
-osu!lazer 把铺面、皮肤等文件以内容哈希（SHA-256）存储在 `files/` 目录下，文件名与原始文件名无关。本工具读取 lazer 的 Realm 数据库，根据哈希找到对应的文件，在 stable 对应的目录下以可读的名字建立硬链接。
+osu!lazer 把铺面、皮肤等文件以内容哈希（SHA-256）存储在 `files/` 目录下，文件名与原始文件名无关。本工具读取 lazer 的 Realm 数据库，根据哈希找到对应文件，在 stable 目录下以可读的名字建立硬链接。
 
-**硬链接**使得两个路径指向磁盘上的同一份数据，只有一份数据副本被存储。因此无需复制文件，不占用额外磁盘空间。
+硬链接让两个路径指向磁盘上的同一份数据，因此无需复制文件，不占用额外磁盘空间。铺面文件夹名沿用 stable 的惯例 `{在线ID} {艺术家} - {标题}`，皮肤沿用 `{名称} ({作者})`。
 
-铺面的文件夹名沿用 stable 的惯例 `{在线ID} {艺术家} - {标题}`；皮肤沿用 `{名称} ({作者})`。
-
-## 系统要求
+## 系统要求与安装
 
 - Windows（硬链接 API 为 Windows 专用）
 - [.NET 10.0](https://dotnet.microsoft.com/download/dotnet/10.0) 运行时
-- osu!lazer 和 osu!stable 的数据目录在**同一磁盘分区**（硬链接要求）
+- osu!lazer 和 osu!stable 的数据目录在**同一磁盘分区**（硬链接要求；不同分区会退回复制）
 
-## 安装
+从 [Releases](https://github.com/tkw6688/osu-AssetLinker/releases) 下载 `osu-AssetLinker.exe`，放到任意目录运行即可。
 
-从 [Releases](https://github.com/tkw6688/osu-AssetLinker/releases) 下载 `osu-AssetLinker.exe`，放到任意目录运行即可（需要上面的 .NET 10.0 运行时）。
-
-## 用法
+## 快速开始
 
 ### 交互模式（推荐）
 
-直接双击 `osu-AssetLinker.exe`（不传任何参数）进入向导：
+直接双击 `osu-AssetLinker.exe`（不传参数）进入向导：
 
-1. 依次确认 lazer 数据目录和 **osu!stable 根目录**（含 `osu!.exe` / `Songs` / `Skins`；留空使用自动检测结果）
-2. 选择要同步的内容（铺面 / 皮肤，可多选）
-3. 若选择了铺面，自动解析 Songs 目录（优先读取 stable 配置里的 `BeatmapDirectory`，没有配置时使用 `<stable>\Songs`；找不到时会让你重选或创建）
-4. 选择是否启用 `--relink`
-5. 选择是否在执行前先预览：选「是」会先只读扫描并显示结果，确认后再执行；选「否」直接执行
-6. 查看操作摘要，确认后才开始执行
+1. 确认 lazer 数据目录和 osu!stable 根目录（留空使用自动检测）
+2. 选择要同步的内容（铺面 / 皮肤）
+3. 选择是否启用 `--relink`
+4. 选择是否在执行前先预览（选「是」会先只读扫描，确认后再执行）
+5. 查看摘要并确认
 
 ### 命令行
+
+```sh
+# 先预览，不写入任何文件
+osu-AssetLinker --all --dry-run
+
+# 确认后正式同步
+osu-AssetLinker --all
+```
+
+## 命令行用法
 
 ```
 osu-AssetLinker [--lazer-dir <目录>] [--stable-dir <目录>] [功能开关] [其他选项]
 ```
 
-#### 参数
+功能开关：`--beats`（默认）、`--skins`、`--all`，含义见上方「[能同步的内容](#能同步的内容)」。
+
+### 路径参数
 
 | 参数 | 说明 |
 |------|------|
-| `--lazer-dir` | osu!lazer 数据目录（包含 `client.realm`），省略则自动检测 `%APPDATA%\osu`。若 lazer 设置了自定义数据目录，会读取 `storage.ini` 自动跟随 |
-| `--stable-dir` | osu!stable 根目录（包含 `osu!.exe` / `Songs` / `Skins` / `osu!*.cfg`），省略则自动检测。也接受 `Songs` 或 `Skins` 目录，会自动改用其父目录 |
+| `--lazer-dir` | lazer 数据目录（含 `client.realm`）。省略时自动检测 `%APPDATA%\osu`；若 lazer 使用了自定义数据目录，会读取 `storage.ini` 自动跟随 |
+| `--stable-dir` | stable 根目录（含 `osu!.exe` / `Songs` / `Skins` / `osu!*.cfg`）。省略时自动检测；也接受 `Songs` 或 `Skins` 目录，会自动改用其父目录 |
+
+铺面目标优先使用 stable 配置 `osu!.{用户名}.cfg` 里的 `BeatmapDirectory`（相对 stable 根目录解析），没有可用配置时使用 `<stable-dir>\Songs`；皮肤固定写入 `<stable-dir>\Skins`。
 
 > 旧的位置参数 `[lazer目录] [Songs目录]` 已移除，请改用 `--lazer-dir` / `--stable-dir`。
 
-铺面目标优先使用 stable 用户配置 `osu!.{用户名}.cfg` 里的 `BeatmapDirectory`（默认值 `Songs`，相对 stable 根目录解析）；没有可用配置时才使用 `<stable-dir>\Songs`。皮肤固定写入 `<stable-dir>\Skins`。
-
-#### 功能开关
+### 其他选项
 
 | 选项 | 说明 |
 |------|------|
-| `--beats` | 同步铺面到 stable 的 Songs 目录（优先使用配置里的 `BeatmapDirectory`） |
-| `--skins` | 同步皮肤到 `<stable-dir>\Skins` |
-| `--all` | 同步以上全部 |
-
-#### 其他选项
-
-| 选项 | 说明 |
-|------|------|
-| `--relink` | 将 stable 中已有的普通文件（之前通过复制产生的）替换为硬链接，释放磁盘空间 |
-| `--dry-run` | 只预览将要执行的操作，不创建、修改或删除任何文件 |
+| `--relink` | 把 stable 中已有的普通文件替换为硬链接，释放重复占用的空间 |
+| `--dry-run` | 只预览，不创建、修改或删除任何文件 |
 | `--version`, `-v` | 显示版本与构建提交 |
 | `--help`, `-h` | 显示帮助信息 |
 
 ### 示例
 
 ```sh
-# 自动检测路径，同步新铺面到 stable
 osu-AssetLinker
-
-# 同步皮肤
 osu-AssetLinker --skins
-
-# 同步全部内容，并把已有普通文件替换为硬链接
 osu-AssetLinker --all --relink
-
-# 手动指定路径
-osu-AssetLinker --lazer-dir "C:\Users\你的用户名\AppData\Roaming\osu" --stable-dir "C:\osu!" --skins
-
-# 手动指定路径 + 重链接
 osu-AssetLinker --lazer-dir "D:\osu-lazer" --stable-dir "D:\osu-stable" --all --relink
-
-# 预览全部同步结果，不写入任何文件
-osu-AssetLinker --all --dry-run
 ```
 
 ## 注意事项
 
-1. **建议先关闭 osu!lazer** —— 工具以只读方式打开 Realm 数据库，一般不影响 lazer 运行，但如果报错请先关掉 lazer 再试。
-2. **硬链接要求同一分区** —— 若 lazer 和 stable 在不同分区，工具会退回到复制模式（占用额外空间），但 `--relink` 模式下会直接报错退出。
-3. **同步完成后在 stable 中按 `F5`** 刷新铺面列表；皮肤需要重启 stable 才能在皮肤列表里看到。
-4. **不要用 stable 修改这些文件** —— 因为文件是硬链接，在 stable 里编辑铺面或皮肤会直接改动 lazer 中的原始副本。删除 stable 中的文件则是安全的（lazer 那份不受影响）。
-5. 如果 lazer 中删除了某个铺面，stable 中已存在的硬链接仍然有效（只要 lazer 的源文件未被删除），但不会自动清理。需要手动删除 stable 中对应的文件夹。
-6. Windows 路径最长支持 260 字符（`MAX_PATH`）。本工具会自动检测并截断过长的文件名，确保不超出限制。
-7. 本工具只读取 lazer 的数据，**绝不写入**。
-8. 如果 lazer 改过自定义数据目录，`%APPDATA%\osu` 里可能只剩 `client.realm.lock`、`client.realm.management`、`storage.ini` 等残留文件，数据库本体在别处。工具会自动读取 `storage.ini` 的 `FullPath` 跟随过去；也可以用 `--lazer-dir` 直接指定自定义目录。
-9. `--dry-run` 只做只读检查（文件存在性、链接数、SHA-256 比对），不会创建、修改或删除任何文件，适合正式同步前先预览。
-
-## 退出码
-
-| 退出码 | 含义 |
-|--------|------|
-| `0` | 成功（或用户取消） |
-| `1` | 参数、路径或数据库错误 |
-| `2` | 同步完成，但有文件或条目失败 |
+1. **建议先关闭 osu!lazer**：工具以只读方式打开 Realm，一般不影响运行，但如果报错请先关掉 lazer。
+2. **硬链接要求同一分区**：不同分区会自动退回复制模式；`--relink` 模式下会直接报错退出。
+3. **同步完成后在 stable 中按 `F5`** 刷新铺面；皮肤需要重启 stable 才能看到。
+4. **不要用 stable 修改这些文件**：硬链接意味着在 stable 里编辑铺面或皮肤会直接改动 lazer 中的原始副本。删除 stable 中的文件是安全的。
+5. lazer 中删除铺面后，stable 里已有的硬链接不会自动清理，需要手动删除对应文件夹。
+6. Windows 路径上限 260 字符（`MAX_PATH`），工具会自动截断过长的文件名。
+7. 工具**只读取** lazer 数据，绝不写入。
+8. lazer 使用自定义数据目录时，`%APPDATA%\osu` 可能只剩 `storage.ini` 等残留文件；工具会自动跟随 `storage.ini` 的 `FullPath`，也可以用 `--lazer-dir` 直接指定。
 
 ## 行为说明
 
@@ -132,69 +107,21 @@ osu-AssetLinker --all --dry-run
 | stable 中已存在（普通文件，内容不同） | 跳过 | **跳过并警告**，不覆盖 |
 | stable 中已存在（硬链接） | 跳过 | 跳过 |
 
-`--relink` 替换前会逐字节校验内容（先比长度，再比 SHA-256）。**内容不同时绝不覆盖** —— 因为 stable 里那份可能是你改过的（例如手动编辑过的 `skin.ini`），覆盖会造成数据丢失。这种情况会在输出里标成 `⚠ N 个文件内容不同，未覆盖`。
+`--relink` 替换前会先比长度、再比 SHA-256。**内容不同时绝不覆盖**，因为 stable 里那份可能是你改过的（例如手动编辑过的 `skin.ini`）。输出中会标为 `⚠ N 个文件内容不同，未覆盖`。
 
-**已知限制**：目标文件夹只要存在就不会再检查，**不会补上缺失的文件**（沿用旧版铺面的逻辑）。需要补文件时可以先删掉对应文件夹再同步。
+**已知限制**：目标文件夹只要存在就不会再检查，不会补上缺失的文件。需要补文件时可以删除对应文件夹后重新同步。
 
----
+## 退出码
+
+| 退出码 | 含义 |
+|--------|------|
+| `0` | 成功（或用户取消） |
+| `1` | 参数、路径或数据库错误 |
+| `2` | 同步完成，但有文件或条目失败 |
 
 ## 开发
 
-### 从源码构建
-
-```sh
-# 构建
-dotnet build osu-AssetLinker.slnx -c Release
-
-# 测试（只使用系统临时目录，不需要安装 osu!lazer / osu!stable）
-dotnet test osu-AssetLinker.slnx -c Release
-
-# 发布单文件（框架依赖，发布选项已配置在 csproj 里）
-dotnet publish src/osu-AssetLinker/osu-AssetLinker.csproj -c Release -o publish
-```
-
-发布产物位于 `publish/osu-AssetLinker.exe`（单文件，约 5 MB，不内置运行时）。测试项目位于 `tests/osu-AssetLinker.Tests`。
-
-推送日期 tag（例如 `20261118-v2`）或 `v*` tag（例如 `v1.1.0`）会触发 `.github/workflows/release.yml`：构建、测试、发布单文件，并创建对应的 GitHub Release（版本号取自 tag，会去掉开头的 `v`）。
-
-仓库里的 `osu/` 是 osu!lazer 源码，仅供对照查阅，位于项目目录之外，不参与编译。
-
-### 实现说明
-
-**Realm schema 版本**：lazer 的数据库有 schema 版本号，且**必须精确匹配**才能打开。lazer 每次升级都可能改变这个版本号，因此本工具会先按已知版本尝试，失败时从报错信息中读出真实版本再重试，无需随 lazer 更新而重新编译。
-
-`src/osu-AssetLinker/Lazer/LazerModels.cs` 里声明了本工具用到的 lazer 数据模型。如果 lazer 删除或改名了其中某个字段，工具会给出明确报错，此时需要同步更新该文件。
-
-**皮肤文件夹名的匹配**：lazer 从 stable 导入皮肤时会给皮肤改名，在末尾追加 `[原文件夹名]`（见 `SkinImporter.checkSkinIniMetadata`）。所以本工具除了 `{名称} ({作者})` 和 `{名称}`，还会拿这段后缀去匹配 stable 里已有的文件夹，避免同一份皮肤被重复导入。
-
-### 目录结构
-
-主项目位于 `src/osu-AssetLinker/`，以下为该目录内的结构；测试项目位于 `tests/osu-AssetLinker.Tests/`。
-
-```
-Program.cs                   入口：编码、Banner、--help
-Cli/                         参数解析、帮助、交互向导、控制台会话
-App/                         主流程、路径解析、结果汇总
-Lazer/LazerModels.cs         lazer 的 Realm 数据模型（子集声明）
-Lazer/LazerRealm.cs          以只读方式打开 Realm，自动探测 schema 版本
-Lazer/LazerData.cs           lazer 数据目录 / storage.ini / Realm 文件定位
-Lazer/LazerFileStore.cs      lazer 文件仓库的哈希路径解析
-Stable/StableData.cs         stable 根目录、cfg（BeatmapDirectory）与 Songs 解析
-Stable/StableModels.cs       stable 路径与解析结果模型
-Sync/BeatmapSyncer.cs        铺面同步
-Sync/SkinSyncer.cs           皮肤同步
-Sync/SyncContext.cs          同步上下文
-Sync/SyncStats.cs            同步统计
-Sync/FileJobExecutor.cs      文件任务执行（链接/复制/relink 与计数）
-Sync/FileJob.cs              文件任务与执行模式
-Sync/DestPathResolver.cs     目标路径分配（长路径冲突避让）
-Sync/BeatmapFolderNaming.cs  铺面文件夹命名
-Linking/HardLink.cs          硬链接原生 API、卷判断
-Linking/FileSync.cs          单个文件的链接/复制/重链接策略（含内容校验）
-Linking/PathSanitizer.cs     文件名/路径分量清洗
-Linking/PathLength.cs        MAX_PATH 截断
-ConsoleUi/Ui.cs              控制台输出
-```
+构建、测试、发布流程和实现说明见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 许可证
 
