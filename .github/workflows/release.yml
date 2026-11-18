@@ -1,0 +1,44 @@
+name: release
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: '**/*.csproj'
+
+      - name: Build
+        run: dotnet build osu-AssetLinker.slnx -c Release --nologo
+
+      - name: Test
+        run: dotnet test osu-AssetLinker.slnx -c Release --no-build --nologo
+
+      - name: Publish
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          dotnet publish src/osu-AssetLinker/osu-AssetLinker.csproj -c Release -o publish --nologo \
+            -p:InformationalVersion="$version"
+
+      - name: Create release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            publish/osu-AssetLinker.exe LICENSE \
+            --generate-notes
