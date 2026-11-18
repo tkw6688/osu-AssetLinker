@@ -34,16 +34,6 @@ osu!lazer 把铺面、皮肤等文件以内容哈希（SHA-256）存储在 `file
 
 从 [Releases](https://github.com/tkw6688/osu-AssetLinker/releases) 下载 `osu-AssetLinker.exe`，放到任意目录运行即可（需要上面的 .NET 10.0 运行时）。
 
-## 开发
-
-```sh
-dotnet build osu-AssetLinker.slnx -c Release
-dotnet test osu-AssetLinker.slnx -c Release
-dotnet publish -c Release -o publish
-```
-
-测试只使用系统临时目录，不需要安装 osu!lazer 或 osu!stable。
-
 ## 用法
 
 ### 交互模式（推荐）
@@ -138,14 +128,17 @@ osu-AssetLinker --lazer-dir "D:\osu-lazer" --stable-dir "D:\osu-stable" --all --
 ### 从源码构建
 
 ```sh
-# 调试构建
-dotnet build -c Release
+# 构建
+dotnet build osu-AssetLinker.slnx -c Release
+
+# 测试（只使用系统临时目录，不需要安装 osu!lazer / osu!stable）
+dotnet test osu-AssetLinker.slnx -c Release
 
 # 发布单文件（框架依赖，发布选项已配置在 csproj 里）
-dotnet publish -c Release -o publish
+dotnet publish osu-AssetLinker.csproj -c Release -o publish
 ```
 
-发布产物位于 `publish/osu-AssetLinker.exe`（单文件，约 7 MB，不内置运行时）。
+发布产物位于 `publish/osu-AssetLinker.exe`（单文件，约 5 MB，不内置运行时）。测试项目位于 `tests/osu-AssetLinker.Tests`。
 
 仓库里的 `osu/` 是 osu!lazer 源码，仅供对照查阅，已在 `osu-AssetLinker.csproj` 里排除，不参与编译。
 
