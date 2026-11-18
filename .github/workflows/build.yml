@@ -27,13 +27,3 @@ jobs:
 
       - name: Test
         run: dotnet test osu-AssetLinker.slnx -c Release --no-build --nologo
-
-      - name: Publish
-        run: dotnet publish src/osu-AssetLinker/osu-AssetLinker.csproj -c Release -o publish --nologo
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: osu-AssetLinker
-          path: publish/osu-AssetLinker.exe
-          if-no-files-found: error

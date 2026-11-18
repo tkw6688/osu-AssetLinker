@@ -155,7 +155,7 @@ dotnet publish src/osu-AssetLinker/osu-AssetLinker.csproj -c Release -o publish
 
 发布产物位于 `publish/osu-AssetLinker.exe`（单文件，约 5 MB，不内置运行时）。测试项目位于 `tests/osu-AssetLinker.Tests`。
 
-推送任意 tag（例如 `20261118` 或 `v1.1.0`）会触发 `.github/workflows/release.yml`：构建、测试、发布单文件，并创建对应的 GitHub Release（版本号取自 tag，会去掉开头的 `v`）。
+推送日期 tag（例如 `20261118-v2`）或 `v*` tag（例如 `v1.1.0`）会触发 `.github/workflows/release.yml`：构建、测试、发布单文件，并创建对应的 GitHub Release（版本号取自 tag，会去掉开头的 `v`）。
 
 仓库里的 `osu/` 是 osu!lazer 源码，仅供对照查阅，位于项目目录之外，不参与编译。
 

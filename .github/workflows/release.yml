@@ -3,7 +3,8 @@ name: release
 on:
   push:
     tags:
-      - '*'
+      - '20*'
+      - 'v*'
 
 permissions:
   contents: write
