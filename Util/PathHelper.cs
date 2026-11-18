@@ -38,13 +38,15 @@ public static class PathHelper
 
     /// <summary>
     /// 若完整路径超过 Windows MAX_PATH (260) 限制，截断文件名部分（保留扩展名）。
+    /// <paramref name="claimed"/> 是本批次已经分配过的路径，用于避让同名冲突。
+    /// 冲突判断只依赖已分配集合、不探测磁盘，保证新建与 relink 按相同顺序处理时映射一致。
     /// </summary>
-    public static string TruncateForStable(string destPath, int maxTotal = MaxPath)
+    public static string TruncateForStable(string destPath, int maxTotal = MaxPath, IReadOnlySet<string>? claimed = null)
     {
-        if (destPath.Length <= maxTotal)
+        if (destPath.Length <= maxTotal && claimed?.Contains(destPath) != true)
             return destPath;
 
-        string dir = Path.GetDirectoryName(destPath)!;
+        string dir = Path.GetDirectoryName(destPath) ?? string.Empty;
         string nameNoExt = Path.GetFileNameWithoutExtension(destPath);
         string ext = Path.GetExtension(destPath);
         int maxNameLen = maxTotal - dir.Length - 1 - ext.Length;
@@ -52,20 +54,35 @@ public static class PathHelper
         if (maxNameLen < 5)
             throw new PathTooLongException($"路径过长，无法安全截断: {destPath}");
 
-        string truncated = Path.Combine(dir, nameNoExt[..maxNameLen].TrimEnd().TrimEnd('.') + ext);
+        string baseName = nameNoExt.Length == 0
+            ? "_"
+            : nameNoExt.Length <= maxNameLen
+                ? nameNoExt
+                : nameNoExt[..maxNameLen].TrimEnd().TrimEnd('.');
 
-        // 避免截断后与已有文件冲突
+        if (baseName.Length == 0)
+            baseName = "_";
+
+        string candidate = Path.Combine(dir, baseName + ext);
+
+        // 截断后可能与本批次中已分配的名字冲突（例如前缀相同的长文件名）
         int counter = 2;
-        while (File.Exists(truncated))
+        while (candidate.Length > maxTotal || claimed?.Contains(candidate) == true)
         {
             string suffix = $" ({counter})";
             int adjLen = maxNameLen - suffix.Length;
             if (adjLen < 1) adjLen = 1;
-            truncated = Path.Combine(dir, nameNoExt[..adjLen].TrimEnd().TrimEnd('.') + suffix + ext);
+
+            string stem = baseName.Length <= adjLen ? baseName : baseName[..adjLen];
+            stem = stem.TrimEnd().TrimEnd('.');
+            if (stem.Length == 0)
+                stem = "_";
+
+            candidate = Path.Combine(dir, stem + suffix + ext);
             counter++;
         }
 
-        return truncated;
+        return candidate;
     }
 
     /// <summary>控制台输出用：超长字符串截断并加省略号。</summary>

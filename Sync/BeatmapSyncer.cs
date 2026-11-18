@@ -40,70 +40,91 @@ public static class BeatmapSyncer
             if (alreadyExists)
             {
                 Ui.Inline($"  [{index}/{stats.Total}] [relink] {PathHelper.Ellipsis(folderName, 55)}... ");
-                RunGuarded(stats, () =>
-                {
-                    long differedBefore = stats.FilesContentDiffer;
-                    long replaced = Relink(ctx, set, destDir, stats);
-                    long differed = stats.FilesContentDiffer - differedBefore;
-
-                    if (replaced > 0)
-                    {
-                        Ui.InlineAccent($"✓ 释放 {replaced} 个文件");
-                        stats.Relinked++;
-                    }
-                    else
-                    {
-                        Ui.InlineDim("已是硬链接，跳过");
-                        stats.Skipped++;
-                    }
-
-                    if (differed > 0)
-                        Ui.InlineError($"  ⚠ {differed} 个文件内容不同，未覆盖");
-
-                    Console.WriteLine();
-                });
-
-                continue;
+                Relink(ctx, set, destDir, stats);
             }
-
-            Ui.Inline($"  [{index}/{stats.Total}] {PathHelper.Ellipsis(folderName, 60)}... ");
-            try
+            else
             {
-                Directory.CreateDirectory(destDir);
+                Ui.Inline($"  [{index}/{stats.Total}] {PathHelper.Ellipsis(folderName, 60)}... ");
                 Sync(ctx, set, destDir, stats);
-                Ui.InlineOk("✓");
-                Console.WriteLine();
-                stats.Added++;
             }
-            catch (Exception ex)
-            {
-                Ui.InlineError($"✗ {ex.Message}");
-                Console.WriteLine();
-                try
-                {
-                    if (Directory.Exists(destDir)) Directory.Delete(destDir, true);
-                }
-                catch
-                {
-                    // 清理失败不影响统计
-                }
-                stats.Failed++;
-            }
+
+            Console.WriteLine();
         }
 
         return stats;
     }
 
-    private static void RunGuarded(SyncStats stats, Action action)
+    /// <summary>正常同步一个铺面集（新增，使用硬链接或复制）。</summary>
+    private static void Sync(SyncContext ctx, BeatmapSetInfo set, string destDir, SyncStats stats)
     {
+        // 只有本次新建的目录才能在失败时整体清理；
+        // 已存在的目录里可能有用户自己的文件，绝不能因为一次失败就删掉。
+        bool createdDir = !Directory.Exists(destDir);
+
         try
         {
-            action();
+            Directory.CreateDirectory(destDir);
+
+            var result = FileJobExecutor.Execute(
+                FileJobExecutor.FromFiles(set.Files, ctx.LazerFilesPath, destDir), FileJobMode.Sync);
+            stats.Add(result);
+
+            if (result.Failed > 0)
+            {
+                Ui.InlineError($"✗ {result.Failed} 个文件失败");
+                if (createdDir)
+                    TryDeleteDirectory(destDir);
+                stats.Failed++;
+                return;
+            }
+
+            Ui.InlineOk("✓");
+            stats.Added++;
         }
         catch (Exception ex)
         {
             Ui.InlineError($"✗ {ex.Message}");
-            Console.WriteLine();
+            if (createdDir)
+                TryDeleteDirectory(destDir);
+            stats.Failed++;
+        }
+    }
+
+    /// <summary>
+    /// --relink：把 stable 中已有的普通文件替换为硬链接。
+    /// 路径映射与 <see cref="Sync"/> 完全一致，长文件名不会因为目标已存在而被改名跳过。
+    /// </summary>
+    private static void Relink(SyncContext ctx, BeatmapSetInfo set, string destDir, SyncStats stats)
+    {
+        try
+        {
+            var result = FileJobExecutor.Execute(
+                FileJobExecutor.FromFiles(set.Files, ctx.LazerFilesPath, destDir), FileJobMode.Relink);
+            stats.Add(result);
+
+            if (result.Relinked > 0)
+            {
+                Ui.InlineAccent($"✓ 释放 {result.Relinked} 个文件");
+                stats.Relinked++;
+            }
+            else
+            {
+                Ui.InlineDim("已是硬链接，跳过");
+                stats.Skipped++;
+            }
+
+            if (result.ContentDiffered > 0)
+                Ui.InlineError($"  ⚠ {result.ContentDiffered} 个文件内容不同，未覆盖");
+
+            if (result.Failed > 0)
+            {
+                stats.Failed++;
+                Ui.InlineError($"  ({result.Failed} 个文件失败)");
+            }
+        }
+        catch (Exception ex)
+        {
+            Ui.InlineError($"✗ {ex.Message}");
             stats.Failed++;
         }
     }
@@ -112,52 +133,16 @@ public static class BeatmapSyncer
     private static bool IsAlreadySynced(string destDir)
         => Directory.Exists(destDir) && Directory.GetFiles(destDir, "*.osu").Length > 0;
 
-    /// <summary>正常同步一个铺面集（新增，使用硬链接或复制）。</summary>
-    private static void Sync(SyncContext ctx, BeatmapSetInfo set, string destDir, SyncStats stats)
+    private static void TryDeleteDirectory(string dir)
     {
-        foreach (var namedFile in set.Files)
+        try
         {
-            if (namedFile.File is null) continue;
-
-            string sourcePath = LazerFileStore.ResolvePath(ctx.LazerFilesPath, namedFile.File.Hash);
-            if (!File.Exists(sourcePath))
-                throw new FileNotFoundException($"Lazer 文件缺失: {sourcePath}");
-
-            string destPath = ResolveDestPath(destDir, namedFile.Filename);
-            Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
-
-            FileSync.Record(FileSync.LinkOne(sourcePath, destPath, relink: false), stats);
+            if (Directory.Exists(dir))
+                Directory.Delete(dir, true);
+        }
+        catch
+        {
+            // 清理失败不影响统计
         }
     }
-
-    /// <summary>
-    /// --relink：遍历铺面集里的每个文件，把 stable 中已有的普通文件替换为硬链接。
-    /// </summary>
-    private static long Relink(SyncContext ctx, BeatmapSetInfo set, string destDir, SyncStats stats)
-    {
-        long replaced = 0;
-
-        foreach (var namedFile in set.Files)
-        {
-            if (namedFile.File is null) continue;
-
-            string sourcePath = LazerFileStore.ResolvePath(ctx.LazerFilesPath, namedFile.File.Hash);
-            if (!File.Exists(sourcePath)) continue; // lazer 源文件不存在则跳过
-
-            string destPath = ResolveDestPath(destDir, namedFile.Filename);
-            if (!File.Exists(destPath)) continue; // stable 里没有该文件则不补
-
-            var outcome = FileSync.LinkOne(sourcePath, destPath, relink: true);
-            FileSync.Record(outcome, stats);
-
-            if (outcome == FileSync.Outcome.Relinked)
-                replaced++;
-        }
-
-        return replaced;
-    }
-
-    private static string ResolveDestPath(string destDir, string relativeFilename)
-        => PathHelper.TruncateForStable(
-            Path.Combine(destDir, PathHelper.SanitizeFilePath(relativeFilename)));
 }

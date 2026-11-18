@@ -55,21 +55,16 @@ public static class SkinSyncer
 
             try
             {
-                var (linked, copied, relinked, differed, failed) = alreadyExists
-                    ? Relink(ctx, skin, destDir)
-                    : Sync(ctx, skin, destDir);
-
-                stats.FilesLinked += linked;
-                stats.FilesCopied += copied;
-                stats.FilesRelinked += relinked;
-                stats.FilesContentDiffer += differed;
-                stats.FilesFailed += failed;
+                var result = FileJobExecutor.Execute(
+                    FileJobExecutor.FromFiles(skin.Files, ctx.LazerFilesPath, destDir),
+                    alreadyExists ? FileJobMode.Relink : FileJobMode.Sync);
+                stats.Add(result);
 
                 if (alreadyExists)
                 {
-                    if (relinked > 0)
+                    if (result.Relinked > 0)
                     {
-                        Ui.InlineAccent($"✓ 释放 {relinked} 个文件");
+                        Ui.InlineAccent($"✓ 释放 {result.Relinked} 个文件");
                         stats.Relinked++;
                     }
                     else
@@ -78,19 +73,19 @@ public static class SkinSyncer
                         stats.Skipped++;
                     }
 
-                    if (differed > 0)
-                        Ui.InlineError($"  ⚠ {differed} 个文件内容不同，未覆盖");
+                    if (result.ContentDiffered > 0)
+                        Ui.InlineError($"  ⚠ {result.ContentDiffered} 个文件内容不同，未覆盖");
                 }
                 else
                 {
-                    Ui.InlineOk($"✓ {linked + copied + failed} 个文件");
+                    Ui.InlineOk($"✓ {result.Linked + result.Copied + result.Failed} 个文件");
                     stats.Added++;
                 }
 
-                if (failed > 0)
+                if (result.Failed > 0)
                 {
                     stats.Failed++;
-                    Ui.InlineError($"  ({failed} 个文件失败)");
+                    Ui.InlineError($"  ({result.Failed} 个文件失败)");
                 }
 
                 Console.WriteLine();
@@ -164,75 +159,4 @@ public static class SkinSyncer
 
     private static string Clamp(string name, int maxLength)
         => name.Length <= maxLength ? name : name[..maxLength].TrimEnd().TrimEnd('.');
-
-    private static (long linked, long copied, long relinked, long differed, long failed) Sync(SyncContext ctx, SkinInfo skin, string destDir)
-    {
-        long linked = 0, copied = 0, failed = 0;
-        Directory.CreateDirectory(destDir);
-
-        foreach (var namedFile in skin.Files)
-        {
-            if (namedFile.File is null) continue;
-
-            string sourcePath = LazerFileStore.ResolvePath(ctx.LazerFilesPath, namedFile.File.Hash);
-            if (!File.Exists(sourcePath))
-            {
-                failed++;
-                continue;
-            }
-
-            try
-            {
-                string destPath = ResolveDestPath(destDir, namedFile.Filename);
-                Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
-
-                switch (FileSync.LinkOne(sourcePath, destPath, relink: false))
-                {
-                    case FileSync.Outcome.Linked: linked++; break;
-                    case FileSync.Outcome.Copied: copied++; break;
-                }
-            }
-            catch
-            {
-                failed++;
-            }
-        }
-
-        return (linked, copied, 0, 0, failed);
-    }
-
-    private static (long linked, long copied, long relinked, long differed, long failed) Relink(SyncContext ctx, SkinInfo skin, string destDir)
-    {
-        long relinked = 0, differed = 0, failed = 0;
-
-        foreach (var namedFile in skin.Files)
-        {
-            if (namedFile.File is null) continue;
-
-            string sourcePath = LazerFileStore.ResolvePath(ctx.LazerFilesPath, namedFile.File.Hash);
-            if (!File.Exists(sourcePath)) continue;
-
-            string destPath = ResolveDestPath(destDir, namedFile.Filename);
-            if (!File.Exists(destPath)) continue;
-
-            try
-            {
-                switch (FileSync.LinkOne(sourcePath, destPath, relink: true))
-                {
-                    case FileSync.Outcome.Relinked: relinked++; break;
-                    case FileSync.Outcome.ContentDiffers: differed++; break;
-                }
-            }
-            catch
-            {
-                failed++;
-            }
-        }
-
-        return (0, 0, relinked, differed, failed);
-    }
-
-    private static string ResolveDestPath(string destDir, string relativeFilename)
-        => PathHelper.TruncateForStable(
-            Path.Combine(destDir, PathHelper.SanitizeFilePath(relativeFilename)));
 }

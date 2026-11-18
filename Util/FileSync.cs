@@ -44,9 +44,46 @@ public static class FileSync
         if (!ContentEquals(src, dest))
             return Outcome.ContentDiffers;
 
-        // 替换：先删除再建链接，失败则回退复制，避免目标文件凭空消失
-        File.Delete(dest);
-        return HardLink.TryCreate(dest, src) ? Outcome.Relinked : Copy(src, dest);
+        // 替换：先建临时链接，再原子地覆盖目标。中途失败时目标文件仍然存在。
+        return ReplaceWithLink(src, dest);
+    }
+
+    /// <summary>
+    /// 在同一个目录里建立临时硬链接（或复制），成功后再覆盖目标。
+    /// 目标只会在替换成功的那一刻被替换，不会出现「先删掉、链接又没建成」的空洞。
+    /// </summary>
+    private static Outcome ReplaceWithLink(string src, string dest)
+    {
+        string dir = Path.GetDirectoryName(dest)!;
+        string temp = Path.Combine(dir, "~al" + Guid.NewGuid().ToString("N")[..8] + ".tmp");
+
+        try
+        {
+            if (HardLink.TryCreate(temp, src))
+            {
+                File.Move(temp, dest, overwrite: true);
+                return Outcome.Relinked;
+            }
+
+            // 硬链接不可用（例如跨卷）：先复制到临时文件，再覆盖目标
+            File.Copy(src, temp, overwrite: true);
+            File.Move(temp, dest, overwrite: true);
+            return Outcome.Copied;
+        }
+        catch
+        {
+            try
+            {
+                if (File.Exists(temp))
+                    File.Delete(temp);
+            }
+            catch
+            {
+                // 清理失败不掩盖原始异常
+            }
+
+            throw;
+        }
     }
 
     /// <summary>比较两个文件内容是否一致（先比长度，再比 SHA-256）。</summary>

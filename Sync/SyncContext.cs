@@ -57,6 +57,16 @@ public sealed class SyncStats
 
     public bool HasFailures => Failed > 0;
 
+    /// <summary>累加一批文件任务的执行结果。</summary>
+    public void Add(FileJobResult result)
+    {
+        FilesLinked += result.Linked;
+        FilesCopied += result.Copied;
+        FilesRelinked += result.Relinked;
+        FilesContentDiffer += result.ContentDiffered;
+        FilesFailed += result.Failed;
+    }
+
     public string Summary()
     {
         var parts = new List<string> { $"新增 {Added}", $"跳过 {Skipped}" };
