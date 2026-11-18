@@ -28,7 +28,7 @@ public static class SyncRunner
             lazerDataPath = result.LazerPath;
             stablePaths = result.Stable;
             relink = result.Relink;
-            dryRun = result.DryRun;
+            dryRun = result.PreviewFirst;
             features = result.Features;
         }
         else
@@ -114,7 +114,7 @@ public static class SyncRunner
             Ui.Accent("[模式] --relink：将对已有文件也替换为硬链接以释放磁盘空间");
 
         if (dryRun)
-            Ui.Accent("[模式] --dry-run：只报告将要执行的操作，不会写入任何文件");
+            Ui.Accent("[模式] 预览（--dry-run）：只报告将要执行的操作，不会写入任何文件");
 
         Console.WriteLine();
 
@@ -235,7 +235,7 @@ public static class SyncRunner
                 SummaryReporter.Print(results, dryRun);
 
                 // 交互模式下预览后可以直接继续；CLI 模式保持「预览即退出」
-                if (dryRun && interactiveMode && ConsoleSession.Ask("\n按以上预览执行吗？", false))
+                if (dryRun && interactiveMode && ConsoleSession.Ask("\n按以上预览执行吗？", true))
                 {
                     Console.WriteLine();
                     results = RunAll(preview: false);

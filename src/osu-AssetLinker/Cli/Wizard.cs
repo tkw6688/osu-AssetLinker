@@ -73,10 +73,10 @@ public static class Wizard
         Ui.Dim("  替换前会逐字节比对（文件长度 + SHA-256），内容不同的文件不会被覆盖。");
         bool relink = ConsoleSession.Ask("是否启用 --relink？", false);
 
-        // --- dry-run ---
+        // --- 预览 ---
         Console.WriteLine();
-        Ui.Dim("  --dry-run 只报告将要执行的操作，不创建、修改或删除任何文件。");
-        bool dryRun = ConsoleSession.Ask("是否只预览（--dry-run）？", false);
+        Ui.Dim("  可以先只读扫描一遍，预览将要执行的操作，再决定是否继续。");
+        bool previewFirst = ConsoleSession.Ask("执行前是否先预览？", false);
 
         // --- 执行前确认 ---
         Console.WriteLine();
@@ -92,14 +92,14 @@ public static class Wizard
             Console.WriteLine($"    皮肤目标       : {stable.SkinsPath}{note}");
         }
         Console.WriteLine($"    relink 模式    : {(relink ? "开（普通文件会替换为硬链接）" : "关")}");
-        Console.WriteLine($"    执行模式       : {(dryRun ? "预览（不写入任何文件）" : "正常写入")}");
+        Console.WriteLine($"    执行方式       : {(previewFirst ? "先预览，确认后执行" : "直接执行")}");
         Ui.Separator();
 
         if (!ConsoleSession.Ask("\n确认开始？", true))
             return null;
 
         Console.WriteLine();
-        return new InteractiveResult(lazerPath, stable, features, relink, dryRun);
+        return new InteractiveResult(lazerPath, stable, features, relink, previewFirst);
     }
 
     /// <summary>交互模式：Songs 找不到时允许重输根目录 / 手输路径 / 创建目录。</summary>
@@ -264,4 +264,4 @@ public static class Wizard
 }
 
 /// <summary>交互向导收集到的全部选项。</summary>
-public sealed record InteractiveResult(string LazerPath, StablePaths Stable, List<SyncFeature> Features, bool Relink, bool DryRun);
+public sealed record InteractiveResult(string LazerPath, StablePaths Stable, List<SyncFeature> Features, bool Relink, bool PreviewFirst);
