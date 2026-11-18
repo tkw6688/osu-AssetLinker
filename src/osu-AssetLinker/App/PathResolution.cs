@@ -56,7 +56,11 @@ public static class PathResolution
 
         var paths = new StablePaths(stableRoot, songsPath);
         if (features.Contains(SyncFeature.Skins))
+        {
             Ui.Info($"[皮肤] 目标: {paths.SkinsPath}");
+            if (!Directory.Exists(paths.SkinsPath))
+                Ui.Dim("  目录不存在，正式同步时会自动创建（--dry-run 不会）。");
+        }
 
         return paths;
     }

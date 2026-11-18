@@ -204,27 +204,45 @@ public static class SyncRunner
         }
 
         // --- 5. 执行同步 ---
-        var results = new List<SyncStats>();
-
         try
         {
             using (realm)
             {
-                var ctx = new SyncContext
+                List<SyncStats> RunAll(bool preview)
                 {
-                    Realm = realm,
-                    LazerFilesPath = lazerFilesPath,
-                    Stable = stablePaths,
-                    Relink = relink,
-                    DryRun = dryRun,
-                };
+                    var runResults = new List<SyncStats>();
+                    var ctx = new SyncContext
+                    {
+                        Realm = realm,
+                        LazerFilesPath = lazerFilesPath,
+                        Stable = stablePaths,
+                        Relink = relink,
+                        DryRun = preview,
+                    };
 
-                foreach (var feature in features)
-                {
-                    var stats = RunFeature(feature, ctx);
-                    results.Add(stats);
-                    Console.WriteLine();
+                    foreach (var feature in features)
+                    {
+                        runResults.Add(RunFeature(feature, ctx));
+                        Console.WriteLine();
+                    }
+
+                    return runResults;
                 }
+
+                var results = RunAll(dryRun);
+
+                // --- 6. 输出汇总 ---
+                SummaryReporter.Print(results, dryRun);
+
+                // 交互模式下预览后可以直接继续；CLI 模式保持「预览即退出」
+                if (dryRun && interactiveMode && ConsoleSession.Ask("\n按以上预览执行吗？", false))
+                {
+                    Console.WriteLine();
+                    results = RunAll(preview: false);
+                    SummaryReporter.Print(results, dryRun: false);
+                }
+
+                return results.Any(r => r.HasFailures) ? 2 : 0;
             }
         }
         catch (Exception ex)
@@ -233,11 +251,6 @@ public static class SyncRunner
             Ui.Error("\n提示: 请先关闭 osu! lazer 再运行本工具");
             return 1;
         }
-
-        // --- 6. 输出汇总 ---
-        SummaryReporter.Print(results, dryRun);
-
-        return results.Any(r => r.HasFailures) ? 2 : 0;
     }
 
     private static SyncStats RunFeature(SyncFeature feature, SyncContext ctx)

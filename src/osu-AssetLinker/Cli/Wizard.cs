@@ -87,7 +87,10 @@ public static class Wizard
         if (features.Contains(SyncFeature.Beatmaps) && stable.SongsPath != null)
             Console.WriteLine($"    铺面目标       : {stable.SongsPath}");
         if (features.Contains(SyncFeature.Skins))
-            Console.WriteLine($"    皮肤目标       : {stable.SkinsPath}");
+        {
+            string note = Directory.Exists(stable.SkinsPath) ? string.Empty : "（不存在，正式同步时创建）";
+            Console.WriteLine($"    皮肤目标       : {stable.SkinsPath}{note}");
+        }
         Console.WriteLine($"    relink 模式    : {(relink ? "开（普通文件会替换为硬链接）" : "关")}");
         Console.WriteLine($"    执行模式       : {(dryRun ? "预览（不写入任何文件）" : "正常写入")}");
         Ui.Separator();
