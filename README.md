@@ -1,6 +1,6 @@
-# osu! Lazer → Stable 数据同步工具
+# osu!lazer → Stable 数据同步工具
 
-把 osu!lazer 的铺面和皮肤同步到 osu!stable，利用**硬链接（hard link）**实现零额外磁盘占用。
+把 osu!lazer 的铺面和皮肤同步到 osu!stable，利用**硬链接**（hard link）实现零额外磁盘占用。
 
 > 反方向（stable → lazer）不需要本工具：osu!lazer 自带从 stable 导入内容的功能（首次设置向导里的「Import」步骤），同样是硬链接、零额外占用。
 
