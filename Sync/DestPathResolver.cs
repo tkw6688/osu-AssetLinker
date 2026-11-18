@@ -12,9 +12,9 @@ public sealed class DestPathResolver
 
     public string Resolve(string destDir, string relativeFilename)
     {
-        string path = PathHelper.TruncateForStable(
-            Path.Combine(destDir, PathHelper.SanitizeFilePath(relativeFilename)),
-            PathHelper.MaxPath,
+        string path = PathLength.TruncateForStable(
+            Path.Combine(destDir, PathSanitizer.SanitizeFilePath(relativeFilename)),
+            PathLength.MaxPath,
             claimed);
 
         claimed.Add(path);

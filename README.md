@@ -143,24 +143,33 @@ dotnet publish -c Release -o publish
 
 **Realm schema 版本**：lazer 的数据库有 schema 版本号，且**必须精确匹配**才能打开。lazer 每次升级都可能改变这个版本号，因此本工具会先按已知版本尝试，失败时从报错信息中读出真实版本再重试，无需随 lazer 更新而重新编译。
 
-`Realm/LazerModels.cs` 里声明了本工具用到的 lazer 数据模型。如果 lazer 删除或改名了其中某个字段，工具会给出明确报错，此时需要同步更新该文件。
+`Lazer/LazerModels.cs` 里声明了本工具用到的 lazer 数据模型。如果 lazer 删除或改名了其中某个字段，工具会给出明确报错，此时需要同步更新该文件。
 
 **皮肤文件夹名的匹配**：lazer 从 stable 导入皮肤时会给皮肤改名，在末尾追加 `[原文件夹名]`（见 `SkinImporter.checkSkinIniMetadata`）。所以本工具除了 `{名称} ({作者})` 和 `{名称}`，还会拿这段后缀去匹配 stable 里已有的文件夹，避免同一份皮肤被重复导入。
 
 ### 目录结构
 
 ```
-Program.cs              CLI 解析、调度、汇总输出
-Realm/LazerModels.cs    lazer 的 Realm 数据模型（子集声明）
-Realm/LazerRealm.cs     以只读方式打开 Realm，自动探测 schema 版本
-Sync/SyncContext.cs     同步上下文与统计
-Sync/BeatmapSyncer.cs   铺面同步
-Sync/SkinSyncer.cs      皮肤同步
-Util/HardLink.cs        硬链接原生 API、卷判断
-Util/FileSync.cs        单个文件的链接/复制/重链接策略（含内容校验）
-Util/LazerData.cs       lazer 数据目录 / storage.ini / Realm 文件定位
-Util/StableData.cs      stable 根目录、cfg（BeatmapDirectory）与 Songs 解析
-Util/LazerFileStore.cs  lazer 文件仓库的哈希路径解析
-Util/PathHelper.cs      文件名清洗、MAX_PATH 截断
-Util/Ui.cs              控制台输出
+Program.cs                   入口：编码、Banner、--help
+Cli/                         参数解析、帮助、交互向导、控制台会话
+App/                         主流程、路径解析、结果汇总
+Lazer/LazerModels.cs         lazer 的 Realm 数据模型（子集声明）
+Lazer/LazerRealm.cs          以只读方式打开 Realm，自动探测 schema 版本
+Lazer/LazerData.cs           lazer 数据目录 / storage.ini / Realm 文件定位
+Lazer/LazerFileStore.cs      lazer 文件仓库的哈希路径解析
+Stable/StableData.cs         stable 根目录、cfg（BeatmapDirectory）与 Songs 解析
+Stable/StableModels.cs       stable 路径与解析结果模型
+Sync/BeatmapSyncer.cs        铺面同步
+Sync/SkinSyncer.cs           皮肤同步
+Sync/SyncContext.cs          同步上下文
+Sync/SyncStats.cs            同步统计
+Sync/FileJobExecutor.cs      文件任务执行（链接/复制/relink 与计数）
+Sync/FileJob.cs              文件任务与执行模式
+Sync/DestPathResolver.cs     目标路径分配（长路径冲突避让）
+Sync/BeatmapFolderNaming.cs  铺面文件夹命名
+Linking/HardLink.cs          硬链接原生 API、卷判断
+Linking/FileSync.cs          单个文件的链接/复制/重链接策略（含内容校验）
+Linking/PathSanitizer.cs     文件名/路径分量清洗
+Linking/PathLength.cs        MAX_PATH 截断
+ConsoleUi/Ui.cs              控制台输出
 ```

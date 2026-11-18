@@ -21,13 +21,13 @@ public static class BeatmapSyncer
             // 动态计算文件夹名最大长度，确保总路径不超 Windows MAX_PATH (260)
             int longestFileLen = set.Files
                 .Where(f => f.File != null)
-                .Select(f => PathHelper.SanitizeFilePath(f.Filename).Length)
+                .Select(f => PathSanitizer.SanitizeFilePath(f.Filename).Length)
                 .DefaultIfEmpty(0)
                 .Max();
             // 总路径 = Songs + '\' + folderName + '\' + fileName <= 259
-            int maxFolderLen = Math.Clamp(PathHelper.MaxPath - songsPath.Length - 1 - longestFileLen - 1, 20, 200);
+            int maxFolderLen = Math.Clamp(PathLength.MaxPath - songsPath.Length - 1 - longestFileLen - 1, 20, 200);
 
-            string folderName = PathHelper.BuildBeatmapFolderName(set, maxFolderLen);
+            string folderName = BeatmapFolderNaming.Build(set, maxFolderLen);
             string destDir = Path.Combine(songsPath, folderName);
             bool alreadyExists = IsAlreadySynced(destDir);
 
@@ -39,12 +39,12 @@ public static class BeatmapSyncer
 
             if (alreadyExists)
             {
-                Ui.Inline($"  [{index}/{stats.Total}] [relink] {PathHelper.Ellipsis(folderName, 55)}... ");
+                Ui.Inline($"  [{index}/{stats.Total}] [relink] {Ui.Ellipsis(folderName, 55)}... ");
                 Relink(ctx, set, destDir, stats);
             }
             else
             {
-                Ui.Inline($"  [{index}/{stats.Total}] {PathHelper.Ellipsis(folderName, 60)}... ");
+                Ui.Inline($"  [{index}/{stats.Total}] {Ui.Ellipsis(folderName, 60)}... ");
                 Sync(ctx, set, destDir, stats);
             }
 

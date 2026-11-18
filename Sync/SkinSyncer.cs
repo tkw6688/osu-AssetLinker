@@ -48,8 +48,8 @@ public static class SkinSyncer
             }
 
             string prefix = alreadyExists
-                ? $"  [{index}/{stats.Total}] [relink] {PathHelper.Ellipsis(folderName, 50)}... "
-                : $"  [{index}/{stats.Total}] {PathHelper.Ellipsis(folderName, 55)}... ";
+                ? $"  [{index}/{stats.Total}] [relink] {Ui.Ellipsis(folderName, 50)}... "
+                : $"  [{index}/{stats.Total}] {Ui.Ellipsis(folderName, 55)}... ";
 
             Ui.Inline(prefix);
 
@@ -107,10 +107,10 @@ public static class SkinSyncer
     /// </summary>
     private static string ResolveDestDir(SyncContext ctx, SkinInfo skin)
     {
-        string name = PathHelper.SanitizeName(skin.Name);
-        string creator = PathHelper.SanitizeName(skin.Creator);
+        string name = PathSanitizer.SanitizeName(skin.Name);
+        string creator = PathSanitizer.SanitizeName(skin.Creator);
 
-        int maxNameLen = Math.Clamp(PathHelper.MaxPath - ctx.SkinsPath.Length - 1 - FilenameReserve, 20, 200);
+        int maxNameLen = Math.Clamp(PathLength.MaxPath - ctx.SkinsPath.Length - 1 - FilenameReserve, 20, 200);
 
         var candidates = new List<string>();
 
@@ -127,7 +127,7 @@ public static class SkinSyncer
         //    用它可以直接对回 stable 里已有的文件夹，否则 lazer 改过名的皮肤会被重复导入一遍。
         string? archiveName = ExtractArchiveName(name);
         if (archiveName != null)
-            candidates.Add(Clamp(PathHelper.SanitizeName(archiveName), maxNameLen));
+            candidates.Add(Clamp(PathSanitizer.SanitizeName(archiveName), maxNameLen));
 
         foreach (string candidate in candidates)
         {

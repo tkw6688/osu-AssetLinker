@@ -29,6 +29,10 @@ public static class Ui
     public static void InlineError(string text) => WriteInline(ConsoleColor.Red, text);
     public static void InlineAccent(string text) => WriteInline(ConsoleColor.Magenta, text);
 
+    /// <summary>控制台输出用：超长字符串截断并加省略号。</summary>
+    public static string Ellipsis(string s, int maxLen)
+        => s.Length <= maxLen ? s : s[..maxLen] + "…";
+
     private static void Write(ConsoleColor color, string text)
     {
         Console.ForegroundColor = color;
