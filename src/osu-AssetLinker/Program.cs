@@ -9,6 +9,13 @@ using OsuAssetLinker;
 Console.OutputEncoding = Encoding.UTF8;
 Ui.Banner();
 
+// --- --version ---
+if (args.Contains("--version") || args.Contains("-v"))
+{
+    Console.WriteLine(AppInfo.Display);
+    return 0;
+}
+
 // --- --help ---
 if (args.Contains("--help") || args.Contains("-h"))
 {

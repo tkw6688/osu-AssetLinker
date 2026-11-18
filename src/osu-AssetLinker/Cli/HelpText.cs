@@ -22,6 +22,7 @@ public static class HelpText
         Console.WriteLine("其他选项:");
         Console.WriteLine("  --relink       将 stable 中已有的普通文件替换为硬链接，释放磁盘空间");
         Console.WriteLine("                 （要求目标目录与 lazer 在同一磁盘分区）");
+        Console.WriteLine("  --version, -v  显示版本信息");
         Console.WriteLine("  --help, -h     显示此帮助信息");
         Console.WriteLine();
         Console.WriteLine("示例:");
