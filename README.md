@@ -178,3 +178,7 @@ Linking/PathSanitizer.cs     文件名/路径分量清洗
 Linking/PathLength.cs        MAX_PATH 截断
 ConsoleUi/Ui.cs              控制台输出
 ```
+
+## 许可证
+
+[MIT](LICENSE)
