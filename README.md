@@ -135,22 +135,24 @@ dotnet build osu-AssetLinker.slnx -c Release
 dotnet test osu-AssetLinker.slnx -c Release
 
 # 发布单文件（框架依赖，发布选项已配置在 csproj 里）
-dotnet publish osu-AssetLinker.csproj -c Release -o publish
+dotnet publish src/osu-AssetLinker/osu-AssetLinker.csproj -c Release -o publish
 ```
 
 发布产物位于 `publish/osu-AssetLinker.exe`（单文件，约 5 MB，不内置运行时）。测试项目位于 `tests/osu-AssetLinker.Tests`。
 
-仓库里的 `osu/` 是 osu!lazer 源码，仅供对照查阅，已在 `osu-AssetLinker.csproj` 里排除，不参与编译。
+仓库里的 `osu/` 是 osu!lazer 源码，仅供对照查阅，位于项目目录之外，不参与编译。
 
 ### 实现说明
 
 **Realm schema 版本**：lazer 的数据库有 schema 版本号，且**必须精确匹配**才能打开。lazer 每次升级都可能改变这个版本号，因此本工具会先按已知版本尝试，失败时从报错信息中读出真实版本再重试，无需随 lazer 更新而重新编译。
 
-`Lazer/LazerModels.cs` 里声明了本工具用到的 lazer 数据模型。如果 lazer 删除或改名了其中某个字段，工具会给出明确报错，此时需要同步更新该文件。
+`src/osu-AssetLinker/Lazer/LazerModels.cs` 里声明了本工具用到的 lazer 数据模型。如果 lazer 删除或改名了其中某个字段，工具会给出明确报错，此时需要同步更新该文件。
 
 **皮肤文件夹名的匹配**：lazer 从 stable 导入皮肤时会给皮肤改名，在末尾追加 `[原文件夹名]`（见 `SkinImporter.checkSkinIniMetadata`）。所以本工具除了 `{名称} ({作者})` 和 `{名称}`，还会拿这段后缀去匹配 stable 里已有的文件夹，避免同一份皮肤被重复导入。
 
 ### 目录结构
+
+主项目位于 `src/osu-AssetLinker/`，以下为该目录内的结构；测试项目位于 `tests/osu-AssetLinker.Tests/`。
 
 ```
 Program.cs                   入口：编码、Banner、--help

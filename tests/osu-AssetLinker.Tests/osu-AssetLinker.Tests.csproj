@@ -20,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\osu-AssetLinker.csproj" />
+    <ProjectReference Include="..\..\src\osu-AssetLinker\osu-AssetLinker.csproj" />
   </ItemGroup>
 
 </Project>

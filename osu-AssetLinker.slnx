@@ -1,6 +1,8 @@
 <Solution>
+  <Folder Name="/src/">
+    <Project Path="src/osu-AssetLinker/osu-AssetLinker.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/osu-AssetLinker.Tests/osu-AssetLinker.Tests.csproj" />
   </Folder>
-  <Project Path="osu-AssetLinker.csproj" />
 </Solution>
