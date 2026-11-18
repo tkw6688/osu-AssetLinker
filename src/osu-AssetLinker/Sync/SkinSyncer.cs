@@ -81,7 +81,9 @@ public static class SkinSyncer
                     }
                     else
                     {
-                        Ui.InlineDim("已是硬链接，跳过");
+                        // 内容不同时下面会给出更具体的警告，这里不再误报「已是硬链接」
+                        if (result.ContentDiffered == 0)
+                            Ui.InlineDim("已是硬链接，跳过");
                         stats.Skipped++;
                     }
 
