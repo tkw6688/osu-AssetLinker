@@ -22,6 +22,7 @@ public static class HelpText
         Console.WriteLine("其他选项:");
         Console.WriteLine("  --relink       将 stable 中已有的普通文件替换为硬链接，释放磁盘空间");
         Console.WriteLine("                 （要求目标目录与 lazer 在同一磁盘分区）");
+        Console.WriteLine("  --dry-run      只预览将要执行的操作，不写入任何文件");
         Console.WriteLine("  --version, -v  显示版本信息");
         Console.WriteLine("  --help, -h     显示此帮助信息");
         Console.WriteLine();
@@ -31,6 +32,9 @@ public static class HelpText
         Console.WriteLine();
         Console.WriteLine("  osu-AssetLinker --all --relink");
         Console.WriteLine("      同步全部内容，并把已有的普通文件替换为硬链接");
+        Console.WriteLine();
+        Console.WriteLine("  osu-AssetLinker --all --dry-run");
+        Console.WriteLine("      预览全部同步结果，不写入任何文件");
         Console.WriteLine();
         Console.WriteLine("  osu-AssetLinker --lazer-dir \"C:\\Users\\你\\AppData\\Roaming\\osu\" --stable-dir \"C:\\osu!\" --skins");
         Console.WriteLine("      手动指定路径，只同步皮肤");

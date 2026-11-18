@@ -11,6 +11,7 @@ public class ArgumentParserTests
         var options = Assert.IsType<CliOptions>(parsed.Options);
         Assert.Equal(new[] { SyncFeature.Beatmaps }, options.Features);
         Assert.False(options.Relink);
+        Assert.False(options.DryRun);
         Assert.Null(options.LazerDir);
         Assert.Null(options.StableDir);
     }
@@ -51,6 +52,15 @@ public class ArgumentParserTests
 
         var options = Assert.IsType<CliOptions>(parsed.Options);
         Assert.True(options.Relink);
+    }
+
+    [Fact]
+    public void DryRun_IsParsed()
+    {
+        var parsed = ArgumentParser.Parse(["--dry-run"]);
+
+        var options = Assert.IsType<CliOptions>(parsed.Options);
+        Assert.True(options.DryRun);
     }
 
     [Theory]

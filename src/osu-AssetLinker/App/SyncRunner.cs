@@ -12,6 +12,7 @@ public static class SyncRunner
         string lazerDataPath;
         StablePaths stablePaths;
         bool relink;
+        bool dryRun;
         List<SyncFeature> features;
 
         if (interactiveMode)
@@ -27,6 +28,7 @@ public static class SyncRunner
             lazerDataPath = result.LazerPath;
             stablePaths = result.Stable;
             relink = result.Relink;
+            dryRun = result.DryRun;
             features = result.Features;
         }
         else
@@ -41,6 +43,7 @@ public static class SyncRunner
             var options = parsed.Options!;
             features = options.Features;
             relink = options.Relink;
+            dryRun = options.DryRun;
 
             if (options.LazerDir != null)
             {
@@ -109,6 +112,9 @@ public static class SyncRunner
 
         if (relink && !interactiveMode)
             Ui.Accent("[模式] --relink：将对已有文件也替换为硬链接以释放磁盘空间");
+
+        if (dryRun)
+            Ui.Accent("[模式] --dry-run：只报告将要执行的操作，不会写入任何文件");
 
         Console.WriteLine();
 
@@ -210,6 +216,7 @@ public static class SyncRunner
                     LazerFilesPath = lazerFilesPath,
                     Stable = stablePaths,
                     Relink = relink,
+                    DryRun = dryRun,
                 };
 
                 foreach (var feature in features)
@@ -228,7 +235,7 @@ public static class SyncRunner
         }
 
         // --- 6. 输出汇总 ---
-        SummaryReporter.Print(results);
+        SummaryReporter.Print(results, dryRun);
 
         return results.Any(r => r.HasFailures) ? 2 : 0;
     }

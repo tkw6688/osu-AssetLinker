@@ -60,31 +60,34 @@ public static class BeatmapSyncer
         // 只有本次新建的目录才能在失败时整体清理；
         // 已存在的目录里可能有用户自己的文件，绝不能因为一次失败就删掉。
         bool createdDir = !Directory.Exists(destDir);
+        bool canLink = HardLink.LikelySameVolume(ctx.LazerFilesPath, destDir);
 
         try
         {
-            Directory.CreateDirectory(destDir);
+            if (!ctx.DryRun)
+                Directory.CreateDirectory(destDir);
 
             var result = FileJobExecutor.Execute(
-                FileJobExecutor.FromFiles(set.Files, ctx.LazerFilesPath, destDir), FileJobMode.Sync);
+                FileJobExecutor.FromFiles(set.Files, ctx.LazerFilesPath, destDir),
+                FileJobMode.Sync, ctx.DryRun, canLink);
             stats.Add(result);
 
             if (result.Failed > 0)
             {
                 Ui.InlineError($"✗ {result.Failed} 个文件失败");
-                if (createdDir)
+                if (createdDir && !ctx.DryRun)
                     TryDeleteDirectory(destDir);
                 stats.Failed++;
                 return;
             }
 
-            Ui.InlineOk("✓");
+            Ui.InlineOk(ctx.DryRun ? "✓ 将同步" : "✓");
             stats.Added++;
         }
         catch (Exception ex)
         {
             Ui.InlineError($"✗ {ex.Message}");
-            if (createdDir)
+            if (createdDir && !ctx.DryRun)
                 TryDeleteDirectory(destDir);
             stats.Failed++;
         }
@@ -96,15 +99,20 @@ public static class BeatmapSyncer
     /// </summary>
     private static void Relink(SyncContext ctx, BeatmapSetInfo set, string destDir, SyncStats stats)
     {
+        bool canLink = HardLink.LikelySameVolume(ctx.LazerFilesPath, destDir);
+
         try
         {
             var result = FileJobExecutor.Execute(
-                FileJobExecutor.FromFiles(set.Files, ctx.LazerFilesPath, destDir), FileJobMode.Relink);
+                FileJobExecutor.FromFiles(set.Files, ctx.LazerFilesPath, destDir),
+                FileJobMode.Relink, ctx.DryRun, canLink);
             stats.Add(result);
 
             if (result.Relinked > 0)
             {
-                Ui.InlineAccent($"✓ 释放 {result.Relinked} 个文件");
+                Ui.InlineAccent(ctx.DryRun
+                    ? $"✓ 将释放 {result.Relinked} 个文件"
+                    : $"✓ 释放 {result.Relinked} 个文件");
                 stats.Relinked++;
             }
             else

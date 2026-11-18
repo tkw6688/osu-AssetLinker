@@ -8,6 +8,7 @@ public static class ArgumentParser
         string? lazerDir = null;
         string? stableDir = null;
         bool relink = false;
+        bool dryRun = false;
         var features = new HashSet<SyncFeature>();
 
         for (int i = 0; i < args.Length; i++)
@@ -58,6 +59,10 @@ public static class ArgumentParser
                     relink = true;
                     break;
 
+                case "--dry-run":
+                    dryRun = true;
+                    break;
+
                 case "--beats":
                     features.Add(SyncFeature.Beatmaps);
                     break;
@@ -87,6 +92,6 @@ public static class ArgumentParser
         if (features.Contains(SyncFeature.Skins)) ordered.Add(SyncFeature.Skins);
         if (ordered.Count == 0) ordered.Add(SyncFeature.Beatmaps);
 
-        return new(new CliOptions(lazerDir, stableDir, relink, ordered), null);
+        return new(new CliOptions(lazerDir, stableDir, relink, dryRun, ordered), null);
     }
 }

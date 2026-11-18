@@ -16,6 +16,9 @@ public sealed class SyncContext
     /// <summary>--relink：把已有的普通文件替换为硬链接。</summary>
     public required bool Relink { get; init; }
 
+    /// <summary>--dry-run：只报告将要执行的操作，不创建、修改或删除任何文件。</summary>
+    public required bool DryRun { get; init; }
+
     public string StableRoot => Stable.Root;
 
     /// <summary>osu!stable 的 Songs 目录；纯皮肤模式为 null。</summary>

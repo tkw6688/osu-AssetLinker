@@ -44,7 +44,8 @@ osu!lazer 把铺面、皮肤等文件以内容哈希（SHA-256）存储在 `file
 2. 选择要同步的内容（铺面 / 皮肤，可多选）
 3. 若选择了铺面，自动解析 Songs 目录（优先读取 stable 配置里的 `BeatmapDirectory`，没有配置时使用 `<stable>\Songs`；找不到时会让你重选或创建）
 4. 选择是否启用 `--relink`
-5. 查看操作摘要，确认后才开始执行
+5. 选择是否只预览（`--dry-run`）
+6. 查看操作摘要，确认后才开始执行
 
 ### 命令行
 
@@ -76,6 +77,7 @@ osu-AssetLinker [--lazer-dir <目录>] [--stable-dir <目录>] [功能开关] [�
 | 选项 | 说明 |
 |------|------|
 | `--relink` | 将 stable 中已有的普通文件（之前通过复制产生的）替换为硬链接，释放磁盘空间 |
+| `--dry-run` | 只预览将要执行的操作，不创建、修改或删除任何文件 |
 | `--version`, `-v` | 显示版本与构建提交 |
 | `--help`, `-h` | 显示帮助信息 |
 
@@ -96,6 +98,9 @@ osu-AssetLinker --lazer-dir "C:\Users\你的用户名\AppData\Roaming\osu" --sta
 
 # 手动指定路径 + 重链接
 osu-AssetLinker --lazer-dir "D:\osu-lazer" --stable-dir "D:\osu-stable" --all --relink
+
+# 预览全部同步结果，不写入任何文件
+osu-AssetLinker --all --dry-run
 ```
 
 ## 注意事项
@@ -108,6 +113,15 @@ osu-AssetLinker --lazer-dir "D:\osu-lazer" --stable-dir "D:\osu-stable" --all --
 6. Windows 路径最长支持 260 字符（`MAX_PATH`）。本工具会自动检测并截断过长的文件名，确保不超出限制。
 7. 本工具只读取 lazer 的数据，**绝不写入**。
 8. 如果 lazer 改过自定义数据目录，`%APPDATA%\osu` 里可能只剩 `client.realm.lock`、`client.realm.management`、`storage.ini` 等残留文件，数据库本体在别处。工具会自动读取 `storage.ini` 的 `FullPath` 跟随过去；也可以用 `--lazer-dir` 直接指定自定义目录。
+9. `--dry-run` 只做只读检查（文件存在性、链接数、SHA-256 比对），不会创建、修改或删除任何文件，适合正式同步前先预览。
+
+## 退出码
+
+| 退出码 | 含义 |
+|--------|------|
+| `0` | 成功（或用户取消） |
+| `1` | 参数、路径或数据库错误 |
+| `2` | 同步完成，但有文件或条目失败 |
 
 ## 行为说明
 
@@ -140,6 +154,8 @@ dotnet publish src/osu-AssetLinker/osu-AssetLinker.csproj -c Release -o publish
 ```
 
 发布产物位于 `publish/osu-AssetLinker.exe`（单文件，约 5 MB，不内置运行时）。测试项目位于 `tests/osu-AssetLinker.Tests`。
+
+推送任意 tag（例如 `20261118` 或 `v1.1.0`）会触发 `.github/workflows/release.yml`：构建、测试、发布单文件，并创建对应的 GitHub Release（版本号取自 tag，会去掉开头的 `v`）。
 
 仓库里的 `osu/` 是 osu!lazer 源码，仅供对照查阅，位于项目目录之外，不参与编译。
 

@@ -27,10 +27,19 @@ public static class SkinSyncer
             return stats;
 
         string skinsPath = ctx.SkinsPath;
+        bool canLink = HardLink.LikelySameVolume(ctx.LazerFilesPath, skinsPath);
+
         if (!Directory.Exists(skinsPath))
         {
-            Ui.Warn($"创建 Skins 目录: {skinsPath}");
-            Directory.CreateDirectory(skinsPath);
+            if (ctx.DryRun)
+            {
+                Ui.Warn($"[预览] 将创建 Skins 目录: {skinsPath}");
+            }
+            else
+            {
+                Ui.Warn($"创建 Skins 目录: {skinsPath}");
+                Directory.CreateDirectory(skinsPath);
+            }
         }
 
         foreach (var skin in skins)
@@ -57,14 +66,17 @@ public static class SkinSyncer
             {
                 var result = FileJobExecutor.Execute(
                     FileJobExecutor.FromFiles(skin.Files, ctx.LazerFilesPath, destDir),
-                    alreadyExists ? FileJobMode.Relink : FileJobMode.Sync);
+                    alreadyExists ? FileJobMode.Relink : FileJobMode.Sync,
+                    ctx.DryRun, canLink);
                 stats.Add(result);
 
                 if (alreadyExists)
                 {
                     if (result.Relinked > 0)
                     {
-                        Ui.InlineAccent($"✓ 释放 {result.Relinked} 个文件");
+                        Ui.InlineAccent(ctx.DryRun
+                            ? $"✓ 将释放 {result.Relinked} 个文件"
+                            : $"✓ 释放 {result.Relinked} 个文件");
                         stats.Relinked++;
                     }
                     else
@@ -78,7 +90,9 @@ public static class SkinSyncer
                 }
                 else
                 {
-                    Ui.InlineOk($"✓ {result.Linked + result.Copied + result.Failed} 个文件");
+                    Ui.InlineOk(ctx.DryRun
+                        ? $"✓ 将同步 {result.Linked + result.Copied + result.Failed} 个文件"
+                        : $"✓ {result.Linked + result.Copied + result.Failed} 个文件");
                     stats.Added++;
                 }
 

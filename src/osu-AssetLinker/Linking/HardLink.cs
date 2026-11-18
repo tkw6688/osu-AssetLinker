@@ -75,6 +75,13 @@ public static class HardLink
         return a == b;
     }
 
+    /// <summary>
+    /// 乐观判断两个路径能否建立硬链接：只有明确不在同一卷时才返回 false，
+    /// 无法判断时按可链接处理（实际执行时会按文件回退为复制）。
+    /// </summary>
+    public static bool LikelySameVolume(string pathA, string pathB)
+        => SameVolume(NearestExistingDirectory(pathA), NearestExistingDirectory(pathB)) != false;
+
     /// <summary>沿路径向上找到第一个真实存在的目录（用来比较卷序列号）。</summary>
     public static string NearestExistingDirectory(string path)
     {

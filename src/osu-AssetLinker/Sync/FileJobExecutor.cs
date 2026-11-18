@@ -16,7 +16,15 @@ public sealed class FileJobResult
 /// </summary>
 public static class FileJobExecutor
 {
-    public static FileJobResult Execute(IEnumerable<FileJob> jobs, FileJobMode mode)
+    /// <summary>
+    /// 执行一批文件任务。<paramref name="dryRun"/> 为 true 时只统计「将会发生什么」，
+    /// 不创建目录、不写文件；<paramref name="canHardLink"/> 用于预览时估算链接还是复制。
+    /// </summary>
+    public static FileJobResult Execute(
+        IEnumerable<FileJob> jobs,
+        FileJobMode mode,
+        bool dryRun = false,
+        bool canHardLink = true)
     {
         bool relink = mode == FileJobMode.Relink;
         var result = new FileJobResult();
@@ -37,6 +45,12 @@ public static class FileJobExecutor
 
             try
             {
+                if (dryRun)
+                {
+                    Predict(job, relink, canHardLink, result);
+                    continue;
+                }
+
                 if (!relink)
                     Directory.CreateDirectory(Path.GetDirectoryName(job.DestPath)!);
 
@@ -63,6 +77,35 @@ public static class FileJobExecutor
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// 预览单个文件的结果：只做只读判断（存在性、链接数、内容比对）。
+    /// 假定硬链接可用时按 Linked 计，否则按 Copied 计。
+    /// </summary>
+    private static void Predict(FileJob job, bool relink, bool canHardLink, FileJobResult result)
+    {
+        if (relink)
+        {
+            // 已经是硬链接，无需处理
+            if (HardLink.GetLinkCount(job.DestPath) > 1)
+                return;
+
+            if (FileSync.ContentEquals(job.SourcePath, job.DestPath))
+                result.Relinked++;
+            else
+                result.ContentDiffered++;
+
+            return;
+        }
+
+        if (File.Exists(job.DestPath))
+            return;
+
+        if (canHardLink)
+            result.Linked++;
+        else
+            result.Copied++;
     }
 
     /// <summary>
